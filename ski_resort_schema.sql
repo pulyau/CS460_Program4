@@ -1,4 +1,4 @@
-
+-- Pulat Uralov and Abdullokh Ganiev
 -- CS460 Program 4: Ski Resort Database Schema
 
 CREATE TABLE Member (
