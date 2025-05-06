@@ -1,3 +1,43 @@
+/*+----------------------------------------------------------------------
+ ||
+ || 			      Program:  Ski Resort Management System (Prog4)	
+ ||
+ ||				       Author:  Pulat Uralov and Abdullokh Ganiev
+ ||
+ || 			       Course:  CSC 460
+ ||
+ ||			  	   Assignment:  Program #4: Database Interaction with JDBC
+ ||
+ || 		  	   Instructor:  Lester McCann
+ ||
+ || 				  	   TA:  Xinyu Guo
+ ||
+ || 	  			 Due Date:  May 6, 2024
+ ||  
+ ||
+ |+-----------------------------------------------------------------------
+ ||      
+ ||  	  Problem Description:  This program connects to an Oracle database to manage a ski resort 
+ ||                             system. It provides functionality for managing members, ski passes,
+ ||                             equipment rentals, and lesson purchases through a menu-driven 
+ ||                             interface with options to add, update, and delete records, as well
+ ||                             as execute specific queries on the data.
+ || 
+ ||  		  Techniques Used:  JDBC database connectivity
+ ||                             SQL query execution and result processing
+ ||                             Menu-driven command-line interface
+ ||                             Transaction management with commit/rollback
+ ||                             Data validation and error handling
+ ||
+ ||  Operational Requirements:  Java Version: Java 8 or higher
+ ||                             Oracle JDBC driver in classpath
+ ||                             Valid Oracle database credentials
+ ||                             Access to ski resort database tables
+ ||
+ ||    Known Limitations/Bugs:  Limited input validation for some fields
+ ||                             No support for batch processing operations
+ ||
+ ++-----------------------------------------------------------------------*/
 import java.io.*;
 import java.util.Random;
 import java.sql.*;
@@ -5,12 +45,84 @@ import java.util.Scanner;
 import java.text.ParseException;
 import java.text.SimpleDateFormat; 
 
-public class Prog4Raw {
+/*+----------------------------------------------------------------------
+||
+||  Class Prog4 
+||	
+||         Author:  Pulat Uralov and Abdullokh Ganiev
+||
+||        Purpose:  Provides a menu-driven interface to manage a ski resort
+||                  database system. Allows users to add, update, and delete
+||                  records for members, ski passes, equipment, equipment rentals,
+||                  and lesson purchases, as well as execute predefined queries.
+||	
+||  Inherits From:  None.
+||
+||     Interfaces:  None.
+||
+|+-----------------------------------------------------------------------
+||
+||      Constants:  ORACLE_URL -- Connection string for the Oracle database.
+||
+|+-----------------------------------------------------------------------
+||
+||  Class Methods:  main()                    -- Entry point for the program
+||                  displayMenu()             -- Shows the main menu options
+||                  getUserChoice()           -- Gets a validated menu choice from user
+||                  ProcessQueueries()        -- Displays query menu and processes selection
+||                  queryMemberLessons()      -- Executes query for lessons purchased by a member
+||                  querySkiPassActivity()    -- Executes query for activity of a ski pass
+||                  queryIntermediateTrails() -- Executes query for open intermediate trails
+||                  queryCustom()             -- Executes custom query for property net worth
+||                  AddTupleToTable()         -- Displays add menu and processes selection
+||                  UpdateTupleInTable()      -- Displays update menu and processes selection
+||                  DeleteTupleFromTable()    -- Displays delete menu and processes selection
+||                  AddMemberQuery()          -- Adds a new member record
+||                  AddSkiPassQuery()         -- Adds a new ski pass record
+||                  AddEquipmentQuery()       -- Adds a new equipment record
+||                  AddEquipmentRentalQuery() -- Adds a new equipment rental record
+||                  AddLessonPurchaseQuery()  -- Adds a new lesson purchase record
+||                  UpdateMember()            -- Updates an existing member record
+||                  UpdateSkiPass()           -- Updates an existing ski pass record
+||                  UpdateEquipment()         -- Updates an existing equipment record
+||                  UpdateEquipmentRental()   -- Updates an existing equipment rental record
+||                  UpdateLessonPurchase()    -- Updates an existing lesson purchase record
+||                  DeleteMemberQuery()       -- Deletes a member record
+||                  DeleteSkiPassQuery()      -- Deletes a ski pass record
+||                  DeleteEquipmentQuery()    -- Deletes an equipment record
+||                  DeleteEquipmentRecordQuery() -- Deletes an equipment rental record
+||                  DeleteLessonPurchaseQuery() -- Deletes a lesson purchase record
+||                  checkIfExists()           -- Helper function to check if a record exists
+||                  PrintTable()              -- Displays the table names for selection
+||
+++-----------------------------------------------------------------------*/
+
+public class Prog4 {
     private static final String ORACLE_URL = "jdbc:oracle:thin:@aloe.cs.arizona.edu:1521:oracle";
     
     private static final Scanner scanner = new Scanner(System.in);
     private static Connection connection = null;
 
+    /*---------------------------------------------------------------------
+    |
+    |  Method main(args)
+    |
+    |  Purpose:  Entry point for the program. Establishes database connection
+    |            using command-line credentials and presents the main menu
+    |            for user interaction with the database queries.
+    |
+    |  Pre-condition:  Command-line arguments contain valid Oracle username 
+    |                  and password.
+    |
+    |  Post-condition: Program executes user-selected queries and exits cleanly,
+    |                  closing database connections and input streams.
+    |
+    |  Parameters:
+    |      args[0] -- Oracle database username
+    |      args[1] -- Oracle database password
+    |
+    |  Returns:  None. Program exits with status code 0 on success, -1 on error.
+    *-------------------------------------------------------------------*/
     public static void main(String[] args) {
         String username = null;
         String password = null;
@@ -90,7 +202,22 @@ public class Prog4Raw {
             }
         }
     }
-    
+
+    /*---------------------------------------------------------------------
+    |
+    |  Method displayMenu()
+    |
+    |  Purpose:  Displays the main menu options for the user, showing
+    |            the different operations that can be performed.
+    |
+    |  Pre-condition:  Console output is available.
+    |
+    |  Post-condition: Menu options are displayed to the console.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    *-------------------------------------------------------------------*/
     private static void displayMenu() {
         System.out.println("\n--- Prog 4 Menu ---");
         System.out.println("1. Add a tuple to a table");
@@ -101,6 +228,21 @@ public class Prog4Raw {
         System.out.print("Enter your choice (1-5): ");
     }
 
+    /*---------------------------------------------------------------------
+    |
+    |  Method getUserChoice()
+    |
+    |  Purpose:  Obtains and validates a menu choice from the user.
+    |            Ensures the input is a number between 1 and 5.
+    |
+    |  Pre-condition:  Scanner is initialized and available for input.
+    |
+    |  Post-condition: Returns a validated integer choice between 1 and 5.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  An integer between 1 and 5 representing the user's choice.
+    *-------------------------------------------------------------------*/
     private static int getUserChoice() {
         int choice = 0;
         boolean validInput = false;
@@ -121,6 +263,21 @@ public class Prog4Raw {
     }
 
 
+    /*---------------------------------------------------------------------
+    |
+    |  Method ProcessQueueries()
+    |
+    |  Purpose:  Displays the query menu and processes the user's selection,
+    |            executing the appropriate query based on choice.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |
+    |  Post-condition: Selected query is executed and results displayed.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    *-------------------------------------------------------------------*/
     private static void ProcessQueueries() {
         System.out.println("\n--- Query Processing Menu ---");
         System.out.println("1. List ski lessons purchased by a member");
@@ -173,6 +330,25 @@ public class Prog4Raw {
         }
     }
 
+    /*---------------------------------------------------------------------
+    |
+    |  Method queryMemberLessons()
+    |
+    |  Purpose:  Executes a query to list all ski lessons purchased by a
+    |            specified member, including lesson details and instructor info.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |                  Tables Member, LessonPurchase, Lesson, Instructor,
+    |                  and Employee exist with proper relationships.
+    |
+    |  Post-condition: Query results showing lesson details are displayed.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    |
+    |  Throws: SQLException if there is an error executing the query.
+    *-------------------------------------------------------------------*/
     private static void queryMemberLessons() throws SQLException {
         System.out.print("Enter member ID: ");
         int memberId = Integer.parseInt(scanner.nextLine().trim());
@@ -221,6 +397,25 @@ public class Prog4Raw {
         }   
     }
     
+    /*---------------------------------------------------------------------
+    |
+    |  Method querySkiPassActivity()
+    |
+    |  Purpose:  Executes a query to display lift rides and equipment rentals
+    |            associated with a specific ski pass.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |                  Tables SkiPass, Member, Lift, and EquipmentRecord exist
+    |                  with proper relationships.
+    |
+    |  Post-condition: Query results showing lift and rental details are displayed.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    |
+    |  Throws: SQLException if there is an error executing the query.
+    *-------------------------------------------------------------------*/
     private static void querySkiPassActivity() throws SQLException {
         System.out.print("Enter pass ID: ");
         int passId = Integer.parseInt(scanner.nextLine().trim());
@@ -302,6 +497,24 @@ public class Prog4Raw {
         System.out.println("---------------------------------------------------------------------");
     }
     
+    /*---------------------------------------------------------------------
+    |
+    |  Method queryIntermediateTrails()
+    |
+    |  Purpose:  Executes a query to list all open intermediate-level trails
+    |            that are connected to operational lifts.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |                  Tables Trail and Lift exist with proper relationships.
+    |
+    |  Post-condition: Query results showing trail and lift details are displayed.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    |
+    |  Throws: SQLException if there is an error executing the query.
+    *-------------------------------------------------------------------*/
     private static void queryIntermediateTrails() throws SQLException {
         System.out.println("\nOpen intermediate-level trails with operational lifts:");
     
@@ -340,7 +553,28 @@ public class Prog4Raw {
         }
         System.out.println("--------------------------------------------------------------------------");
     }
+
     
+    /*---------------------------------------------------------------------
+    |
+    |  Method queryCustom()
+    |
+    |  Purpose:  Executes a custom query to calculate the net worth of 
+    |            properties (income minus employee salaries) for a specific
+    |            property or all properties.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |                  Tables Property, Income, and Employee exist with
+    |                  proper relationships.
+    |
+    |  Post-condition: Query results showing property net worth are displayed.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    |
+    |  Throws: SQLException if there is an error executing the query.
+    *-------------------------------------------------------------------*/
     private static void queryCustom() throws SQLException {
         System.out.print("Enter property ID to calculate net worth for (or enter 0 for all properties): ");
         int propertyId = Integer.parseInt(scanner.nextLine().trim());
@@ -411,6 +645,21 @@ public class Prog4Raw {
     }
 
    
+    /*---------------------------------------------------------------------
+    |
+    |  Method DeleteTupleFromTable()
+    |
+    |  Purpose:  Displays the delete menu and processes the user's selection,
+    |            executing the appropriate delete operation based on choice.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |
+    |  Post-condition: Selected delete operation is executed.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    *-------------------------------------------------------------------*/
     private static void DeleteTupleFromTable() {
         System.out.println("Please enter a table to delete from");
         PrintTable();
@@ -434,6 +683,22 @@ public class Prog4Raw {
         }
     }
 
+    /*---------------------------------------------------------------------
+    |
+    |  Method DeleteLessonPurchaseQuery()
+    |
+    |  Purpose:  Deletes a lesson purchase record with the specified ID
+    |            after validating its existence.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |                  LessonPurchase table exists.
+    |
+    |  Post-condition: Lesson purchase record is deleted if it exists.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    *-------------------------------------------------------------------*/
     private static void DeleteLessonPurchaseQuery() {
         System.out.println("Enter Lesson Purchase ID to delete:");
     
@@ -449,14 +714,6 @@ public class Prog4Raw {
             System.out.println("Lesson purchase record does not exist.");
             return;
         }
-    
-        // if (!checkIfExists(
-        //     "SELECT COUNT(*) FROM LessonPurchase WHERE PurchaseID = " + purchaseId +
-        //     " AND RemainingSessions = TotalSessions"
-        // )) {
-        //     System.out.println("Cannot delete. Some sessions have already been used.");
-        //     return;
-        // }
     
         try {
             Statement stmt = connection.createStatement();
@@ -474,6 +731,22 @@ public class Prog4Raw {
     }
     
 
+    /*---------------------------------------------------------------------
+    |
+    |  Method DeleteEquipmentRecordQuery()
+    |
+    |  Purpose:  Deletes an equipment rental record with the specified ID
+    |            after validating its existence. Archives the record before deletion.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |                  EquipmentRecord and ArchivedEquipmentRecord tables exist.
+    |
+    |  Post-condition: Equipment rental record is archived and deleted if it exists.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    *-------------------------------------------------------------------*/
     private static void DeleteEquipmentRecordQuery() {
         System.out.println("Enter Rental ID of equipment record to delete:");
     
@@ -512,7 +785,26 @@ public class Prog4Raw {
         }
     }
     
-
+    /*---------------------------------------------------------------------
+    |
+    |  Method DeleteEquipmentQuery()
+    |
+    |  Purpose:  Deletes an equipment record with the specified ID after
+    |            validating its existence and checking additional constraints.
+    |            Archives the equipment record before deletion.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |                  Equipment and ArchivedEquipment tables exist.
+    |                  Equipment must be in 'Retired' or 'Lost' status.
+    |                  Equipment must not be currently rented out.
+    |
+    |  Post-condition: Equipment record is archived and deleted if all conditions
+    |                  are met.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    *-------------------------------------------------------------------*/
     private static void DeleteEquipmentQuery() {
         System.out.println("Enter Equipment ID to delete:");
     
@@ -572,6 +864,26 @@ public class Prog4Raw {
     }
     
 
+    /*---------------------------------------------------------------------
+    |
+    |  Method DeleteSkiPassQuery()
+    |
+    |  Purpose:  Deletes a ski pass record with the specified ID after validating
+    |            its existence. If the pass is not expired or has remaining uses,
+    |            the user is prompted for confirmation. The pass is archived before
+    |            being removed from the active SkiPass table.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |                  SkiPass and ArchivedSkiPass tables exist.
+    |
+    |  Post-condition: Ski pass record is archived and deleted if conditions are met.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    |
+    |  Throws: SQLException if there is an error during database access.
+    *-------------------------------------------------------------------*/
     private static void DeleteSkiPassQuery() {
         System.out.println("Please enter Ski Pass ID to delete:");
     
@@ -622,7 +934,26 @@ public class Prog4Raw {
         }
     }
     
-
+    /*---------------------------------------------------------------------
+    |
+    |  Method DeleteMemberQuery()
+    |
+    |  Purpose:  Deletes a member record with the specified ID after validating
+    |            its existence and ensuring that the member has no active ski passes,
+    |            open equipment rentals, or unused lesson sessions. All dependent
+    |            records (ski passes, rentals, lessons) are deleted before the member.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |                  Member, SkiPass, EquipmentRecord, and LessonPurchase tables exist.
+    |
+    |  Post-condition: Member and all associated records are deleted if conditions are met.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    |
+    |  Throws: SQLException if there is an error during database access.
+    *-------------------------------------------------------------------*/
     private static void DeleteMemberQuery() {
         System.out.println("Please enter Member ID that you wish to delete");
         int memberId;
@@ -681,9 +1012,23 @@ public class Prog4Raw {
         }
     }
 
-    /**
-     * Executes a SELECT COUNT(*) query and returns true if the result is greater than 0.
-     */
+    /*---------------------------------------------------------------------
+    |
+    |  Method checkIfExists(sql)
+    |
+    |  Purpose:  Helper method that executes a SELECT COUNT(*) query and
+    |            returns true if the result is greater than 0.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |                  SQL query is a valid SELECT COUNT(*) query.
+    |
+    |  Post-condition: Returns true if query returns count > 0, false otherwise.
+    |
+    |  Parameters:
+    |      sql -- String containing the SQL query to execute
+    |
+    |  Returns:  Boolean indicating whether records exist (true) or not (false).
+    *-------------------------------------------------------------------*/
     private static boolean checkIfExists(String sql) {
         try {
             Statement stmt = connection.createStatement();
@@ -733,7 +1078,26 @@ public class Prog4Raw {
         }
     }
 
-
+    /*---------------------------------------------------------------------
+    |
+    |  Method UpdateMember()
+    |
+    |  Purpose:  Updates contact-related fields (phone number, email address,
+    |            or emergency contact) for a specified member in the database.
+    |            Displays the current member details and prompts the user to
+    |            select and update a field.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |                  Member table exists and specified MemberID is valid.
+    |
+    |  Post-condition: The selected field for the member record is updated.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    |
+    |  Throws: SQLException if there is an error during database access.
+    *-------------------------------------------------------------------*/
     private static void UpdateMember() throws SQLException {
         System.out.print("Enter member ID to update: ");
         int memberId = Integer.parseInt(scanner.nextLine().trim());
@@ -798,6 +1162,24 @@ public class Prog4Raw {
         }
     }
 
+    /*---------------------------------------------------------------------
+    |
+    |  Method UpdateSkiPass()
+    |
+    |  Purpose:  Allows the user to update certain fields of a ski pass,
+    |            specifically Remaining Uses or Expiration Date.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |                  SkiPass table exists and the specified pass ID is valid.
+    |
+    |  Post-condition: Selected field is updated in the SkiPass record.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    |
+    |  Throws: SQLException if there is an error during database access.
+    *-------------------------------------------------------------------*/
     private static void UpdateSkiPass() throws SQLException {
         System.out.print("Enter ski pass ID to update: ");
         int passId = Integer.parseInt(scanner.nextLine().trim());
@@ -884,6 +1266,25 @@ public class Prog4Raw {
         }
     }
 
+    /*---------------------------------------------------------------------
+    |
+    |  Method UpdateEquipment()
+    |
+    |  Purpose:  Updates an equipment record in the database. Allows the user
+    |            to modify the equipment type, size, or status after selecting
+    |            the specific equipment ID and confirming its existence.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |                  Equipment table exists and the specified EquipmentID is valid.
+    |
+    |  Post-condition: The selected field for the equipment record is updated.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    |
+    |  Throws: SQLException if there is an error during database access.
+    *-------------------------------------------------------------------*/
     private static void UpdateEquipment() throws SQLException {
         System.out.print("Enter equipment ID to update: ");
         int equipmentId = Integer.parseInt(scanner.nextLine().trim());
@@ -949,6 +1350,25 @@ public class Prog4Raw {
         }
     }
 
+    /*---------------------------------------------------------------------
+    |
+    |  Method UpdateEquipmentRental()
+    |
+    |  Purpose:  Updates the return status of a specific equipment rental record.
+    |            Prompts the user to enter a new return status after verifying
+    |            that the rental record exists.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |                  EquipmentRecord table exists and the specified RentalID is valid.
+    |
+    |  Post-condition: The return status of the specified equipment rental is updated.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    |
+    |  Throws: SQLException if there is an error during database access.
+    *-------------------------------------------------------------------*/
     private static void UpdateEquipmentRental() throws SQLException {
         System.out.print("Enter rental ID to update: ");
         int rentalId = Integer.parseInt(scanner.nextLine().trim());
@@ -1004,6 +1424,25 @@ public class Prog4Raw {
         }
     }
 
+    /*---------------------------------------------------------------------
+    |
+    |  Method UpdateLessonPurchase()
+    |
+    |  Purpose:  Updates the number of remaining sessions for a specific lesson
+    |            purchase record. Verifies that the record exists and that the
+    |            new value is non-negative before applying the update.
+    |
+    |  Pre-condition:  Database connection is established and valid.
+    |                  LessonPurchase table exists and the specified PurchaseID is valid.
+    |
+    |  Post-condition: The RemainingSessions field for the lesson purchase is updated.
+    |
+    |  Parameters:  None.
+    |
+    |  Returns:  None.
+    |
+    |  Throws: SQLException if there is an error during database access.
+    *-------------------------------------------------------------------*/
     private static void UpdateLessonPurchase() throws SQLException {
         System.out.print("Enter lesson purchase ID to update: ");
         int purchaseId = Integer.parseInt(scanner.nextLine().trim());
@@ -1058,7 +1497,25 @@ public class Prog4Raw {
         }
     }
 
-
+/*---------------------------------------------------------------------
+|
+|  Method AddTupleToTable()
+|
+|  Purpose:  Displays a menu for selecting which table to add a new tuple to.
+|            Based on the user’s selection, calls the corresponding method
+|            to insert a new record into the chosen table.
+|
+|  Pre-condition:  Database connection is established and valid.
+|                  Required tables (Member, SkiPass, Equipment, EquipmentRecord, LessonPurchase) exist.
+|
+|  Post-condition: A new tuple is added to the selected table if the input is valid.
+|
+|  Parameters:  None.
+|
+|  Returns:  None.
+|
+|  Throws: SQLException if there is an error during the database insert operation.
+*-------------------------------------------------------------------*/
     private static void AddTupleToTable() {
         System.out.println("\nPlease enter a table to add to");
         PrintTable();
@@ -1090,7 +1547,25 @@ public class Prog4Raw {
             System.err.println("ErrorCode: " + e.getErrorCode());
         }
     }
-
+/*---------------------------------------------------------------------
+|
+|  Method AddMemberQuery()
+|
+|  Purpose:  Adds a new member record to the Member table using user-provided
+|            details including name, phone number, email, and emergency contact.
+|            Generates a unique MemberID for the new member.
+|
+|  Pre-condition:  Database connection is established and valid.
+|                  Member table exists.
+|
+|  Post-condition: A new member record is inserted into the database.
+|
+|  Parameters:  None.
+|
+|  Returns:  None.
+|
+|  Throws: SQLException if there is an error during the insert operation.
+*-------------------------------------------------------------------*/
     private static void AddMemberQuery() throws SQLException {
         System.out.println("\n--- Add New Member ---");
         
@@ -1147,7 +1622,26 @@ public class Prog4Raw {
             System.out.println("Failed to add member. Please try again.");
         }
     }
-    
+
+/*---------------------------------------------------------------------
+|
+|  Method AddSkiPassQuery()
+|
+|  Purpose:  Adds a new ski pass record linked to an existing member.
+|            Accepts details such as pass type, activation/expiration dates,
+|            total uses, and price. Generates a unique PassID.
+|
+|  Pre-condition:  Database connection is established and valid.
+|                  SkiPass and Member tables exist.
+|
+|  Post-condition: A new ski pass record is inserted into the database.
+|
+|  Parameters:  None.
+|
+|  Returns:  None.
+|
+|  Throws: SQLException if there is an error during the insert operation.
+*-------------------------------------------------------------------*/
     private static void AddSkiPassQuery() throws SQLException {
         System.out.println("\n--- Add New Ski Pass ---");
         
@@ -1240,6 +1734,24 @@ public class Prog4Raw {
         }
     }
     
+/*---------------------------------------------------------------------
+|
+|  Method AddEquipmentQuery()
+|
+|  Purpose:  Adds a new equipment record with the specified type, size,
+|            and status. Validates status and generates a unique EquipmentID.
+|
+|  Pre-condition:  Database connection is established and valid.
+|                  Equipment table exists.
+|
+|  Post-condition: A new equipment record is inserted into the database.
+|
+|  Parameters:  None.
+|
+|  Returns:  None.
+|
+|  Throws: SQLException if there is an error during the insert operation.
+*-------------------------------------------------------------------*/
     private static void AddEquipmentQuery() throws SQLException {
         System.out.println("\n--- Add New Equipment ---");
         
@@ -1299,6 +1811,27 @@ public class Prog4Raw {
         }
     }
     
+/*---------------------------------------------------------------------
+|
+|  Method AddEquipmentRentalQuery()
+|
+|  Purpose:  Adds a new equipment rental record linking a member, a valid ski pass,
+|            and an available equipment item. Updates the equipment status and
+|            decrements the pass’s remaining uses in a transaction-safe manner.
+|
+|  Pre-condition:  Database connection is established and valid.
+|                  Member, SkiPass, Equipment, and EquipmentRecord tables exist.
+|                  Selected equipment must be available; pass must be valid.
+|
+|  Post-condition: A new equipment rental record is inserted, equipment status updated,
+|                  and ski pass use decremented. Changes are committed together.
+|
+|  Parameters:  None.
+|
+|  Returns:  None.
+|
+|  Throws: SQLException if there is an error during insert or transaction fails.
+*-------------------------------------------------------------------*/
     private static void AddEquipmentRentalQuery() throws SQLException {
         System.out.println("\n--- Add New Equipment Rental ---");
         
@@ -1415,6 +1948,24 @@ public class Prog4Raw {
         }
     }
     
+/*---------------------------------------------------------------------
+|
+|  Method AddLessonPurchaseQuery()
+|
+|  Purpose:  Adds a new lesson purchase record for a member and a specified lesson.
+|            Accepts the number of sessions purchased and generates a unique ID.
+|
+|  Pre-condition:  Database connection is established and valid.
+|                  Member and Lesson tables exist and the IDs provided are valid.
+|
+|  Post-condition: A new lesson purchase record is inserted into the database.
+|
+|  Parameters:  None.
+|
+|  Returns:  None.
+|
+|  Throws: SQLException if there is an error during the insert operation.
+*-------------------------------------------------------------------*/
     private static void AddLessonPurchaseQuery() throws SQLException {
         System.out.println("\n--- Add New Lesson Purchase ---");
         
@@ -1493,7 +2044,22 @@ public class Prog4Raw {
             System.out.println("Failed to add lesson purchase. Please try again.");
         }
     }
-
+/*---------------------------------------------------------------------
+|
+|  Method PrintTable()
+|
+|  Purpose:  Displays a numbered list of available database tables to the user.
+|            Used as part of menu-driven operations for adding, updating,
+|            or deleting records.
+|
+|  Pre-condition:  Console output is available.
+|
+|  Post-condition: A menu of table options is printed to the console.
+|
+|  Parameters:  None.
+|
+|  Returns:  None.
+*-------------------------------------------------------------------*/
     private static void PrintTable() {
         System.out.println("1. Member");
         System.out.println("2. Ski Pass");
