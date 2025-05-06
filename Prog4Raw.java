@@ -1387,16 +1387,17 @@ public class Prog4Raw {
         }
         
         java.sql.Timestamp rentalTime = new java.sql.Timestamp(System.currentTimeMillis());
-        
+
         PreparedStatement insertStmt = connection.prepareStatement(
-            "INSERT INTO EquipmentRecord (RentalID, EMemberID, EPassID, ReturnStatus, RentalTime) " +
-            "VALUES (?, ?, ?, 'N', ?)"
+            "INSERT INTO EquipmentRecord (RentalID, EMemberID, EPassID, EquipmentID, ReturnStatus, RentalTime) " +
+            "VALUES (?, ?, ?, ?, 'N', ?)"
         );
-        
+
         insertStmt.setInt(1, rentalId);
         insertStmt.setInt(2, memberId);
         insertStmt.setInt(3, passId);
-        insertStmt.setTimestamp(4, rentalTime);
+        insertStmt.setInt(4, equipmentId); // New parameter
+        insertStmt.setTimestamp(5, rentalTime); // Index updated from 4 to 5
         
         connection.setAutoCommit(false);
         
