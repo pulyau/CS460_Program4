@@ -189,37 +189,215 @@ public class Prog4Raw {
                 break;
             case (3):
                 DeleteEquipmentQuery();
+                break;
             case (4):
                 DeleteEquipmentRecordQuery();
+                break;
             case (5):
                 DeleteLessonPurchaseQuery();
+                break;
         }
     }
 
-
     private static void DeleteLessonPurchaseQuery() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'DeleteLessonPurchaseQuery'");
+        System.out.println("Enter Lesson Purchase ID to delete:");
+    
+        int purchaseId;
+        try {
+            purchaseId = Integer.parseInt(scanner.nextLine().trim());
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid purchase ID format.");
+            return;
+        }
+    
+        if (!checkIfExists("SELECT COUNT(*) FROM LessonPurchase WHERE PurchaseID = " + purchaseId)) {
+            System.out.println("Lesson purchase record does not exist.");
+            return;
+        }
+    
+        // if (!checkIfExists(
+        //     "SELECT COUNT(*) FROM LessonPurchase WHERE PurchaseID = " + purchaseId +
+        //     " AND RemainingSessions = TotalSessions"
+        // )) {
+        //     System.out.println("Cannot delete. Some sessions have already been used.");
+        //     return;
+        // }
+    
+        try {
+            Statement stmt = connection.createStatement();
+    
+            stmt.executeUpdate("DELETE FROM LessonPurchase WHERE PurchaseID = " + purchaseId);
+    
+            System.out.println("Lesson purchase record successfully deleted.");
+    
+        } catch (SQLException e) {
+            System.err.println("*** SQLException during lesson purchase deletion:");
+            System.err.println("\tMessage:   " + e.getMessage());
+            System.err.println("\tSQLState:  " + e.getSQLState());
+            System.err.println("\tErrorCode: " + e.getErrorCode());
+        }
     }
+    
 
     private static void DeleteEquipmentRecordQuery() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'DeleteEquipmentRecordQuery'");
+        System.out.println("Enter Rental ID of equipment record to delete:");
+    
+        int rentalId;
+        try {
+            rentalId = Integer.parseInt(scanner.nextLine().trim());
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Rental ID format.");
+            return;
+        }
+    
+        // Step 1: Check if record exists
+        if (!checkIfExists("SELECT COUNT(*) FROM EquipmentRecord WHERE RentalID = " + rentalId)) {
+            System.out.println("Equipment rental record does not exist.");
+            return;
+        }
+    
+        try {
+            Statement stmt = connection.createStatement();
+
+            stmt.executeUpdate(
+            "INSERT INTO ArchivedEquipmentRecord (RentalID, EMemberID, EPassID, RentalTime, ReturnStatus, EquipmentID) " +
+            "SELECT RentalID, EMemberID, EPassID, RentalTime, ReturnStatus, EquipmentID " +
+            "FROM EquipmentRecord WHERE RentalID = " + rentalId
+        );
+    
+            stmt.executeUpdate("DELETE FROM EquipmentRecord WHERE RentalID = " + rentalId);
+    
+            System.out.println("Equipment record successfully deleted and logged.");
+    
+        } catch (SQLException e) {
+            System.err.println("*** SQLException during equipment record deletion:");
+            System.err.println("\tMessage:   " + e.getMessage());
+            System.err.println("\tSQLState:  " + e.getSQLState());
+            System.err.println("\tErrorCode: " + e.getErrorCode());
+        }
     }
+    
 
     private static void DeleteEquipmentQuery() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'DeleteEquipmentQuery'");
+        System.out.println("Enter Equipment ID to delete:");
+    
+        int equipmentId;
+        try {
+            equipmentId = Integer.parseInt(scanner.nextLine().trim());
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Equipment ID format.");
+            return;
+        }
+    
+        // Step 1: Confirm equipment exists
+        if (!checkIfExists("SELECT COUNT(*) FROM Equipment WHERE EquipmentID = " + equipmentId)) {
+            System.out.println("Equipment does not exist.");
+            return;
+        }
+    
+        // Step 2: Check status is 'Retired' or 'Lost'
+        if (!checkIfExists(
+            "SELECT COUNT(*) FROM Equipment WHERE EquipmentID = " + equipmentId +
+            " AND Status IN ('Retired', 'Lost')"
+        )) {
+            System.out.println("Equipment cannot be deleted. Status must be 'Retired' or 'Lost'.");
+            return;
+        }
+    
+        // Step 3: Check that equipment is NOT currently rented out
+        if (checkIfExists(
+            "SELECT COUNT(*) FROM EquipmentRecord WHERE EquipmentID = " + equipmentId +
+            " AND ReturnStatus = 'Rented'"
+        )) {
+            System.out.println("Equipment is currently rented. Cannot delete.");
+            return;
+        }
+    
+        try {
+            Statement stmt = connection.createStatement();
+    
+            // Step 4: Archive the equipment
+            stmt.executeUpdate(
+                "INSERT INTO ArchivedEquipment (EquipmentID, EquipmentType, EquipmentSize, Status) " +
+                "SELECT EquipmentID, EquipmentType, EquipmentSize, Status " +
+                "FROM Equipment WHERE EquipmentID = " + equipmentId
+            );
+    
+            // Step 5: Delete from Equipment table
+            stmt.executeUpdate("DELETE FROM Equipment WHERE EquipmentID = " + equipmentId);
+    
+            System.out.println("Equipment successfully archived and deleted.");
+    
+        } catch (SQLException e) {
+            System.err.println("*** SQLException during equipment deletion:");
+            System.err.println("\tMessage:   " + e.getMessage());
+            System.err.println("\tSQLState:  " + e.getSQLState());
+            System.err.println("\tErrorCode: " + e.getErrorCode());
+        }
     }
+    
 
     private static void DeleteSkiPassQuery() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'DeleteSkiPassQuery'");
+        System.out.println("Please enter Ski Pass ID to delete:");
+    
+        int passId;
+        try {
+            passId = Integer.parseInt(scanner.nextLine().trim());
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Ski Pass ID.");
+            return;
+        }
+
+         // Check if member exists
+        if (!checkIfExists("SELECT COUNT(*) FROM SkiPass WHERE PassID = " + passId)) {
+            System.out.println("Ski Pass doesn't exist!");
+            return;
+        }
+
+        if (!checkIfExists("SELECT COUNT(*) FROM SkiPass " +
+                "WHERE PassID = " + passId +
+                " AND RemainingUses = 0 AND ExpirationDate < SYSDATE")) 
+        {
+            System.out.print("Ski pass is not expired or has remaining uses. Is this a refund? (y/n): ");
+            String response = scanner.nextLine().trim().toLowerCase();
+            if (!response.equals("y")) {
+                System.out.println("Deletion cancelled.");
+                return;
+            }
+        }
+
+        try {
+            Statement stmt = connection.createStatement();
+            // Archive the ski pass before deletion
+            stmt.executeUpdate(
+                "INSERT INTO ArchivedSkiPass " +
+                "SELECT * FROM SkiPass WHERE PassID = " + passId
+            );
+    
+            // Then delete it from active table
+            stmt.executeUpdate("DELETE FROM SkiPass WHERE PassID = " + passId);
+    
+            System.out.println("Ski pass successfully deleted and archived.");
+        } catch (SQLException e) {
+            System.err.println("*** SQLException: "
+                + "Could not execute query.");
+            System.err.println("\tMessage:   " + e.getMessage());
+            System.err.println("\tSQLState:  " + e.getSQLState());
+            System.err.println("\tErrorCode: " + e.getErrorCode());
+        }
     }
+    
 
     private static void DeleteMemberQuery() {
         System.out.println("Please enter Member ID that you wish to delete");
-        int memberId = Integer.parseInt(scanner.nextLine().trim());
+        int memberId;
+        try {
+            memberId = Integer.parseInt(scanner.nextLine().trim());
+        }
+        catch (NumberFormatException e) {
+            System.out.println("Invalid Ski Pass ID.");
+            return;
+        }
 
         // Check if member exists
         if (!checkIfExists("SELECT COUNT(*) FROM Member WHERE MemberID = " + memberId)) {
@@ -235,14 +413,14 @@ public class Prog4Raw {
         }
 
         // Check open rentals
-        if (checkIfExists("SELECT COUNT(*) FROM EquipmentRecord WHERE MemberID = " + memberId +
+        if (checkIfExists("SELECT COUNT(*) FROM EquipmentRecord WHERE EMemberID = " + memberId +
                         " AND ReturnStatus = 'NotReturned'")) {
             System.out.println("Cannot delete member: open equipment rentals exist.");
             return;
         }
 
         // Check unused lessons
-        if (checkIfExists("SELECT COUNT(*) FROM LessonPurchase WHERE MemberID = " + memberId +
+        if (checkIfExists("SELECT COUNT(*) FROM LessonPurchase WHERE LPMemberID = " + memberId +
                         " AND RemainingSessions > 0")) {
             System.out.println("Cannot delete member: unused lesson sessions exist.");
             return;
@@ -252,8 +430,8 @@ public class Prog4Raw {
         try {
             Statement stmt = connection.createStatement();
 
-            stmt.executeUpdate("DELETE FROM LessonPurchase WHERE MemberID = " + memberId);
-            stmt.executeUpdate("DELETE FROM EquipmentRecord WHERE MemberID = " + memberId);
+            stmt.executeUpdate("DELETE FROM LessonPurchase WHERE LPMemberID = " + memberId);
+            stmt.executeUpdate("DELETE FROM EquipmentRecord WHERE EMemberID = " + memberId);
             stmt.executeUpdate("DELETE FROM SkiPass WHERE MemberID = " + memberId);
             stmt.executeUpdate("DELETE FROM Member WHERE MemberID = " + memberId);
 
@@ -377,285 +555,5 @@ public class Prog4Raw {
         System.out.println("4. Equipment Record");
         System.out.println("5. Lesson Purchase");
     }
-    
-
-    // private static void processQuery1() {
-    //     try {
-    //         int year = getValidYear();
-    //         String tableName = getTableNameForYear(year);
-            
-    //         if (tableName == null) {
-    //             System.out.println("Error: Invalid year.");
-    //             return;
-    //         }
-            
-    //         String category = getValidCategory();
-    //         String columnName = categoryToColumnName(category);
-    //         String query = "SELECT * FROM (" +
-    //                 "SELECT state, " + columnName + " AS registrations " +
-    //                 "FROM " + tableName + " " +
-    //                 "ORDER BY " + columnName + " DESC" +
-    //                 ") WHERE ROWNUM <= 10";
-            
-    //         try (Statement stmt = connection.createStatement();
-    //              ResultSet rs = stmt.executeQuery(query)) {
-                
-    //             System.out.println("\n--- Top 10 States for " + category + " Registrations in " + year + " ---");
-    //             System.out.printf("%-25s %-15s\n", "State", "Registrations");
-    //             System.out.println("------------------------------------------------");
-                
-    //             while (rs.next()) {
-    //                 String state = rs.getString("state");
-    //                 int registrations = rs.getInt("registrations");
-    //                 System.out.printf("%-25s %-15d\n", state, registrations);
-    //             }
-    //         }
-    //     } catch (SQLException e) {
-    //         System.err.println("*** SQLException: "
-    //             + "Could not execute query.");
-    //         System.err.println("\tMessage:   " + e.getMessage());
-    //         System.err.println("\tSQLState:  " + e.getSQLState());
-    //         System.err.println("\tErrorCode: " + e.getErrorCode());
-    //     }
-    // }
-    
-    // private static void processQuery2() {
-    //     try {
-    //         System.out.println("\n--- States with Fewer Than 1 Million Total Registrations ---");
-    //         System.out.printf("%-10s %-15s\n", "Year", "Count");
-    //         System.out.println("-------------------------");
-            
-    //         int[] years = {1990, 2000, 2010, 2020};
-            
-    //         for (int year : years) {
-    //             String tableName = getTableNameForYear(year);
-                
-    //             String query = "SELECT COUNT(*) AS state_count " +
-    //                           "FROM " + tableName + " " +
-    //                           "WHERE (auto + bus + truck + motorcycle) < 1000000";
-                
-    //             try (Statement stmt = connection.createStatement();
-    //                  ResultSet rs = stmt.executeQuery(query)) {
-                    
-    //                 if (rs.next()) {
-    //                     int count = rs.getInt("state_count");
-    //                     System.out.printf("%-10d %-15d\n", year, count);
-    //                 }
-    //             }
-    //         }
-    //     } catch (SQLException e) {
-    //         System.err.println("*** SQLException: "
-    //             + "Could not execute query.");
-    //         System.err.println("\tMessage:   " + e.getMessage());
-    //         System.err.println("\tSQLState:  " + e.getSQLState());
-    //         System.err.println("\tErrorCode: " + e.getErrorCode());
-    //     }
-    // }
-    
-    // private static void processQuery3() {
-    //     try {
-    //         String state = getValidState();
-            
-    //         System.out.println("\n--- Truck vs. Auto Registration Percentage for " + state + " ---");
-    //         System.out.printf("%-10s %-20s\n", "Year", "Percentage Difference");
-    //         System.out.println("-----------------------------------");
-            
-    //         int[] years = {1990, 2000, 2010, 2020};
-            
-    //         for (int year : years) {
-    //             String tableName = getTableNameForYear(year);
-                
-    //             String query = "SELECT auto, truck FROM " + tableName + " WHERE UPPER(state) = '" + 
-    //                           state.toUpperCase() + "'";
-                
-    //             try (Statement stmt = connection.createStatement();
-    //                  ResultSet rs = stmt.executeQuery(query)) {
-                    
-    //                 if (rs.next()) {
-    //                     int autos = rs.getInt("auto");
-    //                     int trucks = rs.getInt("truck");
-    //                     double percentage;
-    //                     if (autos == 0) {
-    //                         percentage = trucks > 0 ? Double.POSITIVE_INFINITY : 0;
-    //                     } else {
-    //                         // By Formula: ((trucks - autos) / autos) * 100
-    //                         percentage = ((double)(trucks - autos) / autos) * 100;
-    //                     }
-    //                     if (Double.isInfinite(percentage)) {
-    //                         System.out.printf("%-10d %-20s\n", year, "Infinite (No autos registered)");
-    //                     } else {
-    //                         String prefix = percentage >= 0 ? "+" : "";
-    //                         System.out.printf("%-10d %s%.2f%%\n", year, prefix, percentage);
-    //                     }
-    //                 } else {
-    //                     System.out.printf("%-10d %-20s\n", year, "No data available");
-    //                 }
-    //             }
-    //         }
-    //     } catch (SQLException e) {
-    //         System.err.println("*** SQLException: "
-    //             + "Could not execute query.");
-    //         System.err.println("\tMessage:   " + e.getMessage());
-    //         System.err.println("\tSQLState:  " + e.getSQLState());
-    //         System.err.println("\tErrorCode: " + e.getErrorCode());
-    //     }
-    // }
-
-    // private static void processQuery4() {
-    //     try {
-    //         System.out.println("\nAvailable regions: Northeast, Southeast, Midwest, Southwest, West");
-    //         System.out.print("Enter a region: ");
-    //         String region = scanner.nextLine().trim();
-    //         String stateList = getStatesInRegion(region);
-            
-    //         if (stateList == null) {
-    //             System.out.println("Error: Invalid region. Please try again.");
-    //             return;
-    //         }
-            
-    //         System.out.println("\n--- Average Motorcycle Registration Growth by Decade for " + region + " Region ---");
-    //         System.out.printf("%-20s %-20s\n", "Decade Comparison", "Average Growth (%)");
-    //         System.out.println("------------------------------------------------");
-            
-    //         // Compare 1990 to 2000
-    //         compareDecades(1990, 2000, stateList);
-            
-    //         // Compare 2000 to 2010
-    //         compareDecades(2000, 2010, stateList);
-            
-    //         // Compare 2010 to 2020
-    //         compareDecades(2010, 2020, stateList);
-            
-    //     } catch (SQLException e) {
-    //         System.err.println("*** SQLException: "
-    //             + "Could not execute query.");
-    //         System.err.println("\tMessage:   " + e.getMessage());
-    //         System.err.println("\tSQLState:  " + e.getSQLState());
-    //         System.err.println("\tErrorCode: " + e.getErrorCode());
-    //     }
-    // }
-
-    // private static void compareDecades(int startYear, int endYear, String stateList) throws SQLException {
-    //     String startTable = getTableNameForYear(startYear);
-    //     String endTable = getTableNameForYear(endYear);
-        
-    //     String query = 
-    //         "SELECT AVG((e.motorcycle - s.motorcycle) / NULLIF(s.motorcycle, 0) * 100) AS avg_growth " +
-    //         "FROM " + startTable + " s JOIN " + endTable + " e ON s.state = e.state " +
-    //         "WHERE UPPER(s.state) IN (" + stateList + ")";
-        
-    //     try (Statement stmt = connection.createStatement();
-    //          ResultSet rs = stmt.executeQuery(query)) {
-            
-    //         if (rs.next()) {
-    //             Double avgGrowth = rs.getDouble("avg_growth");
-    //             if (rs.wasNull()) {
-    //                 System.out.printf("%-20s %-20s\n", startYear + " to " + endYear, "N/A (Division by zero)");
-    //             } else {
-    //                 System.out.printf("%-20s %-20.2f%%\n", startYear + " to " + endYear, avgGrowth);
-    //             }
-    //         } else {
-    //             System.out.printf("%-20s %-20s\n", startYear + " to " + endYear, "No data available");
-    //         }
-    //     }
-    // }
-
-    // private static String getStatesInRegion(String region) {
-    //     region = region.toLowerCase();
-        
-    //     StringBuilder states = new StringBuilder();
-        
-    //     switch (region) {
-    //         case "northeast":
-    //             states.append("'MAINE', 'NEW HAMPSHIRE', 'VERMONT', 'MASSACHUSETTS', 'RHODE ISLAND', ");
-    //             states.append("'CONNECTICUT', 'NEW YORK', 'NEW JERSEY', 'PENNSYLVANIA'");
-    //             break;
-    //         case "southeast":
-    //             states.append("'DELAWARE', 'MARYLAND', 'DISTRICT OF COLUMBIA', 'VIRGINIA', 'WEST VIRGINIA', ");
-    //             states.append("'NORTH CAROLINA', 'SOUTH CAROLINA', 'GEORGIA', 'FLORIDA', 'KENTUCKY', 'TENNESSEE', ");
-    //             states.append("'ALABAMA', 'MISSISSIPPI', 'ARKANSAS', 'LOUISIANA'");
-    //             break;
-    //         case "midwest":
-    //             states.append("'OHIO', 'INDIANA', 'ILLINOIS', 'MICHIGAN', 'WISCONSIN', 'MINNESOTA', ");
-    //             states.append("'IOWA', 'MISSOURI', 'NORTH DAKOTA', 'SOUTH DAKOTA', 'NEBRASKA', 'KANSAS'");
-    //             break;
-    //         case "southwest":
-    //             states.append("'OKLAHOMA', 'TEXAS', 'NEW MEXICO', 'ARIZONA'");
-    //             break;
-    //         case "west":
-    //             states.append("'MONTANA', 'IDAHO', 'WYOMING', 'COLORADO', 'UTAH', 'NEVADA', ");
-    //             states.append("'WASHINGTON', 'OREGON', 'CALIFORNIA', 'ALASKA', 'HAWAII'");
-    //             break;
-    //         default:
-    //             return null;
-    //     }
-        
-    //     return states.toString();
-    // }
-    
-
-    // private static String getTableNameForYear(int year) {
-    //     switch (year) {
-    //         case 1990:
-    //             return TABLE_1990;
-    //         case 2000:
-    //             return TABLE_2000;
-    //         case 2010:
-    //             return TABLE_2010;
-    //         case 2020:
-    //             return TABLE_2020;
-    //         default:
-    //             return null;
-    //     }
-    // }
-
-    // private static int getValidYear() {
-    //     int year = 0;
-    //     boolean validInput = false;
-        
-    //     while (!validInput) {
-    //         System.out.print("\nEnter year (1990, 2000, 2010, or 2020): ");
-    //         try {
-    //             year = Integer.parseInt(scanner.nextLine().trim());
-    //             if (year == 1990 || year == 2000 || year == 2010 || year == 2020) {
-    //                 validInput = true;
-    //             } else {
-    //                 System.out.println("Invalid year. Please enter 1990, 2000, 2010, or 2020.");
-    //             }
-    //         } catch (NumberFormatException e) {
-    //             System.out.println("Invalid input. Please enter a valid year.");
-    //         }
-    //     }
-        
-    //     return year;
-    // }
-    
-    // private static String getValidCategory() {
-    //     String category = "";
-    //     boolean validInput = false;
-        
-    //     while (!validInput) {
-    //         System.out.print("Enter vehicle category (auto, bus, truck, or motorcycle): ");
-    //         category = scanner.nextLine().trim().toLowerCase();
-            
-    //         if (category.equals("auto") || category.equals("bus") || 
-    //             category.equals("truck") || category.equals("motorcycle")) {
-    //             validInput = true;
-    //         } else {
-    //             System.out.println("Invalid category. Please enter auto, bus, truck, or motorcycle.");
-    //         }
-    //     }
-        
-    //     return category;
-    // }
-
-    // private static String getValidState() {
-    //     System.out.print("\nEnter state name: ");
-    //     return scanner.nextLine().trim();
-    // }
-    
-
-    // private static String categoryToColumnName(String category) {
-    //     return category.toLowerCase();
-    // }
+  
 }
