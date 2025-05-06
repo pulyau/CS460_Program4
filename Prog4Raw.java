@@ -122,35 +122,6 @@ public class Prog4Raw {
 
 
     private static void ProcessQueueries() {
-        System.out.println("Please enter a query to process");
-        System.out.println("1. For a given member, list all the ski lessons they have purchased, \n" + //
-                        "including the number of remaining sessions, instructor name, and scheduled time.");
-        System.out.println("2. For a given ski pass, list all lift rides and equipment rentals associated with it, \n" + //
-                        "along with timestamps and return status.");
-        System.out.println("List all open trails suitable for intermediate-level skiers, along with their category \n" + //
-                        "and connected lifts that are currently operational.");
-        System.out.println("Custom query");
-        int choice = getUserChoice();
-        switch (choice) {
-            case (1):
-                ProcessQuery1();
-                break;
-            case (2):
-                ProcessQuery2();
-                break;
-            case (3):
-                ProcessQuery3();
-                break;
-            case (4):
-                ProcessQuery4();
-                break;
-        }
-    }
-
-
-    private static void ProcessQuery3() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'ProcessQuery3'");
         System.out.println("\n--- Query Processing Menu ---");
         System.out.println("1. List ski lessons purchased by a member");
         System.out.println("2. List lift rides and equipment rentals for a ski pass");
@@ -201,7 +172,7 @@ public class Prog4Raw {
             System.err.println("ErrorCode: " + e.getErrorCode());
         }
     }
-    
+
     private static void queryMemberLessons() throws SQLException {
         System.out.print("Enter member ID: ");
         int memberId = Integer.parseInt(scanner.nextLine().trim());
@@ -747,22 +718,34 @@ public class Prog4Raw {
     }
 
     private static void UpdateTupleInTable() {
-        System.out.println("Please enter a table to update");
+        System.out.println("\n--- Update Menu ---");
         PrintTable();
         int choice = getUserChoice();
-        switch (choice) {
-            case (1):
-                UpdateMemberQuery();
-                break;
-            case (2):
-                UpdateSkiPassQuery();
-                break;
-            case (3):
-                UpdateEquipmentQuery();
-            case (4):
-                UpdateEquipmentRecordQuery();
-            case (5):
-                UpdateLessonPurchaseQuery();
+        
+        try {
+            switch (choice) {
+                case 1:
+                    UpdateMember();
+                    break;
+                case 2:
+                    UpdateSkiPass();
+                    break;
+                case 3:
+                    UpdateEquipment();
+                    break;
+                case 4:
+                    UpdateEquipmentRental();
+                    break;
+                case 5:
+                    UpdateLessonPurchase();
+                    break;
+                default:
+                    System.out.println("Invalid choice. Returning to main menu.");
+            }
+        } catch (SQLException e) {
+            System.err.println("*** SQLException: " + e.getMessage());
+            System.err.println("SQLState: " + e.getSQLState());
+            System.err.println("ErrorCode: " + e.getErrorCode());
         }
     }
 
