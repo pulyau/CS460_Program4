@@ -193,7 +193,7 @@ public class Prog4Raw {
         System.out.println("\nLessons purchased by " + memberName + " (ID: " + memberId + "):");
         
         PreparedStatement stmt = connection.prepareStatement(
-            "SELECT lp.RemainingSessions, l.LessonLevel, e.Name, l.StartTime " +
+            "SELECT lp.RemainingSessions, l.LessonLevel, e.Name as InstructorName, l.StartTime " +
             "FROM LessonPurchase lp " +
             "JOIN Lesson l ON lp.LPLessonID = l.LessonID " +
             "JOIN Instructor i ON l.InstructorID = i.InstructorID " +
@@ -205,36 +205,27 @@ public class Prog4Raw {
         ResultSet rs = stmt.executeQuery();
         
         boolean hasLessons = false;
-        System.out.println("\n-------------------------------------------------------------------------------------------");
-        System.out.printf("%-10s %-15s %-15s %-15s %-10s %-10s %-8s %-10s\n", 
-                         "Purchase#", "Lesson Type", "Instructor", "Level", "Start", "End", "Price", "Remaining");
-        System.out.println("-------------------------------------------------------------------------------------------");
         
         while (rs.next()) {
             hasLessons = true;
-            System.out.printf("%-10d %-15s %-15s %-15s %-10s %-10s $%-7.2f %-10d\n", 
-                rs.getInt("PurchaseID"),
-                rs.getString("LessonType"),
-                rs.getString("Name"),
+            System.out.printf("%-10d %-15s %-15s %-15s\n", 
+                rs.getInt("RemainingSessions"),
                 rs.getString("LessonLevel"),
-                rs.getString("StartTime"),
-                rs.getString("EndTime"),
-                rs.getDouble("Price"),
-                rs.getInt("RemainingSessions")
+                rs.getString("InstructorName"),
+                rs.getString("StartTime")                
             );
         }
         
         if (!hasLessons) {
             System.out.println("No lesson purchases found for this member.");
-        }
-        System.out.println("-------------------------------------------------------------------------------------------");
+        }   
     }
     
     private static void querySkiPassActivity() throws SQLException {
         System.out.print("Enter pass ID: ");
         int passId = Integer.parseInt(scanner.nextLine().trim());
-        
-        // Check if pass exists
+    
+        // Check if the ski pass exists
         PreparedStatement checkPass = connection.prepareStatement(
             "SELECT p.PassID, p.PassType, m.Name " +
             "FROM SkiPass p " +
@@ -243,102 +234,95 @@ public class Prog4Raw {
         );
         checkPass.setInt(1, passId);
         ResultSet passResult = checkPass.executeQuery();
-        
+    
         if (!passResult.next()) {
             System.out.println("No ski pass found with ID " + passId);
             return;
         }
-        
+    
         String passType = passResult.getString("PassType");
         String memberName = passResult.getString("Name");
-        
+    
         System.out.println("\nActivity for " + passType + " Pass (ID: " + passId + ")");
         System.out.println("Member: " + memberName);
-        
-        // First, query lift rides
-        System.out.println("\n--- Lift Rides ---");
+    
+        // Instead of LiftRide, just list all lifts
+        System.out.println("\n--- Available Lifts (Accessible by Pass) ---");
         PreparedStatement liftStmt = connection.prepareStatement(
-            "SELECT lr.RideTime, l.LiftName " +
-            "FROM LiftRide lr " +
-            "JOIN Lift l ON lr.LiftID = l.LiftID " +
-            "WHERE lr.LRPassID = ? " +
-            "ORDER BY lr.RideTime DESC"
+            "SELECT Name, AbilityLevel, OpenTime, ClosingTime, Status " +
+            "FROM Lift " +
+            "ORDER BY Name"
         );
-        liftStmt.setInt(1, passId);
         ResultSet liftRs = liftStmt.executeQuery();
-        
-        boolean hasRides = false;
-        System.out.println("-------------------------------------");
-        System.out.printf("%-20s %-20s\n", "Timestamp", "Lift Name");
-        System.out.println("-------------------------------------");
-        
+    
+        System.out.printf("%-20s %-15s %-15s %-15s %-10s\n",
+            "Lift Name", "Ability Level", "Open Time", "Close Time", "Status");
+        System.out.println("----------------------------------------------------------------------");
+    
         while (liftRs.next()) {
-            hasRides = true;
-            System.out.printf("%-20s %-20s\n", 
-                liftRs.getTimestamp("RideTime").toString(),
-                liftRs.getString("LiftName")
+            System.out.printf("%-20s %-15s %-15s %-15s %-10s\n",
+                liftRs.getString("Name"),
+                liftRs.getString("AbilityLevel"),
+                liftRs.getString("OpenTime"),
+                liftRs.getString("ClosingTime"),
+                liftRs.getString("Status")
             );
         }
-        
-        if (!hasRides) {
-            System.out.println("No lift rides found for this pass.");
-        }
-        System.out.println("-------------------------------------");
-        
-        // Next, query equipment rentals
+    
+        // Query equipment rentals
         System.out.println("\n--- Equipment Rentals ---");
         PreparedStatement equipStmt = connection.prepareStatement(
             "SELECT er.RentalTime, er.ReturnStatus, e.EquipmentType, e.EquipmentSize " +
             "FROM EquipmentRecord er " +
-            "JOIN Equipment e ON er.EEquipmentID = e.EquipmentID " +
+            "JOIN Equipment e ON er.EquipmentID = e.EquipmentID " +
             "WHERE er.EPassID = ? " +
             "ORDER BY er.RentalTime DESC"
         );
         equipStmt.setInt(1, passId);
         ResultSet equipRs = equipStmt.executeQuery();
-        
+    
         boolean hasRentals = false;
-        System.out.println("---------------------------------------------------------------");
+        System.out.println("---------------------------------------------------------------------");
         System.out.printf("%-20s %-15s %-15s %-15s\n", "Rental Time", "Equipment Type", "Size", "Return Status");
-        System.out.println("---------------------------------------------------------------");
-        
+        System.out.println("---------------------------------------------------------------------");
+    
         while (equipRs.next()) {
             hasRentals = true;
-            System.out.printf("%-20s %-15s %-15s %-15s\n", 
+            System.out.printf("%-20s %-15s %-15s %-15s\n",
                 equipRs.getTimestamp("RentalTime").toString(),
                 equipRs.getString("EquipmentType"),
                 equipRs.getString("EquipmentSize"),
                 equipRs.getString("ReturnStatus")
             );
         }
-        
+    
         if (!hasRentals) {
             System.out.println("No equipment rentals found for this pass.");
         }
-        System.out.println("---------------------------------------------------------------");
+        System.out.println("---------------------------------------------------------------------");
     }
     
     private static void queryIntermediateTrails() throws SQLException {
         System.out.println("\nOpen intermediate-level trails with operational lifts:");
-        
+    
         PreparedStatement stmt = connection.prepareStatement(
             "SELECT t.Name AS TrailName, t.Category, t.DifficultyLevel, " +
-            "       l.Name AS LiftName, l.OpenTime, l.ClosingTime " +
+            "       l.Name AS LiftName, l.OpenTime, l.ClosingTime " +  
             "FROM Trail t " +
             "JOIN Lift l ON (t.TrailID = l.TrailTo OR t.TrailID = l.TrailFrom) " +
             "WHERE t.Status = 'Open' " +
             "AND t.DifficultyLevel = 'Intermediate' " +
-            "AND l.Status = 'Operational' " +
+            "AND l.Status = 'Open' " +
             "ORDER BY t.Name"
         );
         ResultSet rs = stmt.executeQuery();
-        
+    
         boolean hasTrails = false;
         System.out.println("--------------------------------------------------------------------------");
         System.out.printf("%-20s %-15s %-15s %-15s %-10s %-10s\n", 
                          "Trail Name", "Category", "Difficulty", "Connected Lift", "Opens", "Closes");
         System.out.println("--------------------------------------------------------------------------");
-        
+    
         while (rs.next()) {
             hasTrails = true;
             System.out.printf("%-20s %-15s %-15s %-15s %-10s %-10s\n", 
@@ -347,10 +331,10 @@ public class Prog4Raw {
                 rs.getString("DifficultyLevel"),
                 rs.getString("LiftName"),
                 rs.getString("OpenTime"),
-                rs.getString("ClosingTime")
+                rs.getString("ClosingTime")  // Match your actual column name
             );
         }
-        
+    
         if (!hasTrails) {
             System.out.println("No open intermediate trails with operational lifts found.");
         }
