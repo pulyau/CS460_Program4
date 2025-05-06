@@ -1,15 +1,12 @@
 import java.io.*;
+import java.util.Random;
 import java.sql.*;
 import java.util.Scanner;
-
+import java.text.ParseException;
+import java.text.SimpleDateFormat; 
 
 public class Prog4Raw {
     private static final String ORACLE_URL = "jdbc:oracle:thin:@aloe.cs.arizona.edu:1521:oracle";
-    
-    // private static String TABLE_1990;
-    // private static String TABLE_2000;
-    // private static String TABLE_2010;
-    // private static String TABLE_2020;
     
     private static final Scanner scanner = new Scanner(System.in);
     private static Connection connection = null;
@@ -27,11 +24,6 @@ public class Prog4Raw {
                              + "    and <password> is your Oracle password.\n");
             System.exit(-1);
         }
-        
-        // TABLE_1990 = username + ".MVRD1990";
-        // TABLE_2000 = username + ".MVRD2000";
-        // TABLE_2010 = username + ".MVRD2010";
-        // TABLE_2020 = username + ".MVRD2020";
         
         try {
            
@@ -130,7 +122,308 @@ public class Prog4Raw {
 
 
     private static void ProcessQueueries() {
-        throw new UnsupportedOperationException("Unimplemented method 'ProcessQueueries'");
+        System.out.println("\n--- Query Processing Menu ---");
+        System.out.println("1. List ski lessons purchased by a member");
+        System.out.println("2. List lift rides and equipment rentals for a ski pass");
+        System.out.println("3. List open intermediate trails with operational lifts");
+        System.out.println("4. Custom Query: Calculate Net Worth of Properties (Income - Employee Salaries)");
+        System.out.println("5. Return to main menu");
+        System.out.print("Enter your choice (1-5): ");
+        
+        int choice = 0;
+        boolean validInput = false;
+        
+        while (!validInput) {
+            try {
+                choice = Integer.parseInt(scanner.nextLine().trim());
+                if (choice >= 1 && choice <= 5) {
+                    validInput = true;
+                } else {
+                    System.out.print("Please enter a number between 1 and 5: ");
+                }
+            } catch (NumberFormatException e) {
+                System.out.print("Invalid input. Please enter a number between 1 and 5: ");
+            }
+        }
+        
+        try {
+            switch (choice) {
+                case 1:
+                    queryMemberLessons();
+                    break;
+                case 2:
+                    querySkiPassActivity();
+                    break;
+                case 3:
+                    queryIntermediateTrails();
+                    break;
+                case 4:
+                    queryCustom();
+                    break;
+                case 5:
+                    System.out.println("Returning to main menu.");
+                    break;
+                default:
+                    System.out.println("Invalid choice. Returning to main menu.");
+            }
+        } catch (SQLException e) {
+            System.err.println("*** SQLException: " + e.getMessage());
+            System.err.println("SQLState: " + e.getSQLState());
+            System.err.println("ErrorCode: " + e.getErrorCode());
+        }
+    }
+    
+    private static void queryMemberLessons() throws SQLException {
+        System.out.print("Enter member ID: ");
+        int memberId = Integer.parseInt(scanner.nextLine().trim());
+        
+        // Check if member exists
+        PreparedStatement checkMember = connection.prepareStatement(
+            "SELECT Name FROM Member WHERE MemberID = ?"
+        );
+        checkMember.setInt(1, memberId);
+        ResultSet memberResult = checkMember.executeQuery();
+        
+        if (!memberResult.next()) {
+            System.out.println("No member found with ID " + memberId);
+            return;
+        }
+        
+        String memberName = memberResult.getString("Name");
+        System.out.println("\nLessons purchased by " + memberName + " (ID: " + memberId + "):");
+        
+        PreparedStatement stmt = connection.prepareStatement(
+            "SELECT lp.RemainingSessions, l.LessonLevel, e.Name, l.StartTime " +
+            "FROM LessonPurchase lp " +
+            "JOIN Lesson l ON lp.LPLessonID = l.LessonID " +
+            "JOIN Instructor i ON l.InstructorID = i.InstructorID " +
+            "JOIN Employee e ON l.InstructorID = e.EmployeeID " +
+            "WHERE lp.LPMemberID = ? " +
+            "ORDER BY l.StartTime"
+        );
+        stmt.setInt(1, memberId);
+        ResultSet rs = stmt.executeQuery();
+        
+        boolean hasLessons = false;
+        System.out.println("\n-------------------------------------------------------------------------------------------");
+        System.out.printf("%-10s %-15s %-15s %-15s %-10s %-10s %-8s %-10s\n", 
+                         "Purchase#", "Lesson Type", "Instructor", "Level", "Start", "End", "Price", "Remaining");
+        System.out.println("-------------------------------------------------------------------------------------------");
+        
+        while (rs.next()) {
+            hasLessons = true;
+            System.out.printf("%-10d %-15s %-15s %-15s %-10s %-10s $%-7.2f %-10d\n", 
+                rs.getInt("PurchaseID"),
+                rs.getString("LessonType"),
+                rs.getString("Name"),
+                rs.getString("LessonLevel"),
+                rs.getString("StartTime"),
+                rs.getString("EndTime"),
+                rs.getDouble("Price"),
+                rs.getInt("RemainingSessions")
+            );
+        }
+        
+        if (!hasLessons) {
+            System.out.println("No lesson purchases found for this member.");
+        }
+        System.out.println("-------------------------------------------------------------------------------------------");
+    }
+    
+    private static void querySkiPassActivity() throws SQLException {
+        System.out.print("Enter pass ID: ");
+        int passId = Integer.parseInt(scanner.nextLine().trim());
+        
+        // Check if pass exists
+        PreparedStatement checkPass = connection.prepareStatement(
+            "SELECT p.PassID, p.PassType, m.Name " +
+            "FROM SkiPass p " +
+            "JOIN Member m ON p.MemberID = m.MemberID " +
+            "WHERE p.PassID = ?"
+        );
+        checkPass.setInt(1, passId);
+        ResultSet passResult = checkPass.executeQuery();
+        
+        if (!passResult.next()) {
+            System.out.println("No ski pass found with ID " + passId);
+            return;
+        }
+        
+        String passType = passResult.getString("PassType");
+        String memberName = passResult.getString("Name");
+        
+        System.out.println("\nActivity for " + passType + " Pass (ID: " + passId + ")");
+        System.out.println("Member: " + memberName);
+        
+        // First, query lift rides
+        System.out.println("\n--- Lift Rides ---");
+        PreparedStatement liftStmt = connection.prepareStatement(
+            "SELECT lr.RideTime, l.LiftName " +
+            "FROM LiftRide lr " +
+            "JOIN Lift l ON lr.LiftID = l.LiftID " +
+            "WHERE lr.LRPassID = ? " +
+            "ORDER BY lr.RideTime DESC"
+        );
+        liftStmt.setInt(1, passId);
+        ResultSet liftRs = liftStmt.executeQuery();
+        
+        boolean hasRides = false;
+        System.out.println("-------------------------------------");
+        System.out.printf("%-20s %-20s\n", "Timestamp", "Lift Name");
+        System.out.println("-------------------------------------");
+        
+        while (liftRs.next()) {
+            hasRides = true;
+            System.out.printf("%-20s %-20s\n", 
+                liftRs.getTimestamp("RideTime").toString(),
+                liftRs.getString("LiftName")
+            );
+        }
+        
+        if (!hasRides) {
+            System.out.println("No lift rides found for this pass.");
+        }
+        System.out.println("-------------------------------------");
+        
+        // Next, query equipment rentals
+        System.out.println("\n--- Equipment Rentals ---");
+        PreparedStatement equipStmt = connection.prepareStatement(
+            "SELECT er.RentalTime, er.ReturnStatus, e.EquipmentType, e.EquipmentSize " +
+            "FROM EquipmentRecord er " +
+            "JOIN Equipment e ON er.EEquipmentID = e.EquipmentID " +
+            "WHERE er.EPassID = ? " +
+            "ORDER BY er.RentalTime DESC"
+        );
+        equipStmt.setInt(1, passId);
+        ResultSet equipRs = equipStmt.executeQuery();
+        
+        boolean hasRentals = false;
+        System.out.println("---------------------------------------------------------------");
+        System.out.printf("%-20s %-15s %-15s %-15s\n", "Rental Time", "Equipment Type", "Size", "Return Status");
+        System.out.println("---------------------------------------------------------------");
+        
+        while (equipRs.next()) {
+            hasRentals = true;
+            System.out.printf("%-20s %-15s %-15s %-15s\n", 
+                equipRs.getTimestamp("RentalTime").toString(),
+                equipRs.getString("EquipmentType"),
+                equipRs.getString("EquipmentSize"),
+                equipRs.getString("ReturnStatus")
+            );
+        }
+        
+        if (!hasRentals) {
+            System.out.println("No equipment rentals found for this pass.");
+        }
+        System.out.println("---------------------------------------------------------------");
+    }
+    
+    private static void queryIntermediateTrails() throws SQLException {
+        System.out.println("\nOpen intermediate-level trails with operational lifts:");
+        
+        PreparedStatement stmt = connection.prepareStatement(
+            "SELECT t.Name AS TrailName, t.Category, t.DifficultyLevel, " +
+            "       l.Name AS LiftName, l.OpenTime, l.ClosingTime " +
+            "FROM Trail t " +
+            "JOIN Lift l ON (t.TrailID = l.TrailTo OR t.TrailID = l.TrailFrom) " +
+            "WHERE t.Status = 'Open' " +
+            "AND t.DifficultyLevel = 'Intermediate' " +
+            "AND l.Status = 'Operational' " +
+            "ORDER BY t.Name"
+        );
+        ResultSet rs = stmt.executeQuery();
+        
+        boolean hasTrails = false;
+        System.out.println("--------------------------------------------------------------------------");
+        System.out.printf("%-20s %-15s %-15s %-15s %-10s %-10s\n", 
+                         "Trail Name", "Category", "Difficulty", "Connected Lift", "Opens", "Closes");
+        System.out.println("--------------------------------------------------------------------------");
+        
+        while (rs.next()) {
+            hasTrails = true;
+            System.out.printf("%-20s %-15s %-15s %-15s %-10s %-10s\n", 
+                rs.getString("TrailName"),
+                rs.getString("Category"),
+                rs.getString("DifficultyLevel"),
+                rs.getString("LiftName"),
+                rs.getString("OpenTime"),
+                rs.getString("ClosingTime")
+            );
+        }
+        
+        if (!hasTrails) {
+            System.out.println("No open intermediate trails with operational lifts found.");
+        }
+        System.out.println("--------------------------------------------------------------------------");
+    }
+    
+    private static void queryCustom() throws SQLException {
+        System.out.print("Enter property ID to calculate net worth for (or enter 0 for all properties): ");
+        int propertyId = Integer.parseInt(scanner.nextLine().trim());
+        
+        String query;
+        PreparedStatement stmt;
+        
+        if (propertyId > 0) {
+            // Query for a specific property
+            query = "SELECT p.PropertyID, p.PropertyName, p.PropertyType, " +
+                    "SUM(i.Amount) AS TotalIncome, " +
+                    "SUM(e.Salary) AS TotalSalaries, " +
+                    "(SUM(i.Amount) - SUM(e.Salary)) AS NetWorth " +
+                    "FROM Property p " +
+                    "LEFT JOIN Income i ON p.PropertyID = i.IPropertyID " +
+                    "LEFT JOIN Employee e ON p.PropertyID = e.PropertyID " +
+                    "WHERE p.PropertyID = ? " +
+                    "GROUP BY p.PropertyID, p.PropertyName, p.PropertyType";
+            
+            stmt = connection.prepareStatement(query);
+            stmt.setInt(1, propertyId);
+        } else {
+            // Query for all properties
+            query = "SELECT p.PropertyID, p.PropertyName, p.PropertyType, " +
+                    "SUM(i.Amount) AS TotalIncome, " +
+                    "SUM(e.Salary) AS TotalSalaries, " +
+                    "(SUM(i.Amount) - SUM(e.Salary)) AS NetWorth " +
+                    "FROM Property p " +
+                    "LEFT JOIN Income i ON p.PropertyID = i.IPropertyID " +
+                    "LEFT JOIN Employee e ON p.PropertyID = e.PropertyID " +
+                    "GROUP BY p.PropertyID, p.PropertyName, p.PropertyType " +
+                    "ORDER BY NetWorth DESC";
+            
+            stmt = connection.prepareStatement(query);
+        }
+        
+        ResultSet rs = stmt.executeQuery();
+        
+        boolean hasResults = false;
+        System.out.println("\n-------------------------------------------------------------------------");
+        System.out.printf("%-8s %-20s %-15s %-12s %-12s %-12s\n", 
+                         "ID", "Property Name", "Type", "Income", "Salaries", "Net Worth");
+        System.out.println("-------------------------------------------------------------------------");
+        
+        while (rs.next()) {
+            hasResults = true;
+            
+            int id = rs.getInt("PropertyID");
+            String name = rs.getString("PropertyName");
+            String type = rs.getString("PropertyType");
+            double income = rs.getDouble("TotalIncome");
+            double salaries = rs.getDouble("TotalSalaries");
+            double netWorth = rs.getDouble("NetWorth");
+            
+            System.out.printf("%-8d %-20s %-15s $%-11.2f $%-11.2f $%-11.2f\n", 
+                             id, name, type, income, salaries, netWorth);
+        }
+        
+        if (!hasResults) {
+            if (propertyId > 0) {
+                System.out.println("No property found with ID " + propertyId);
+            } else {
+                System.out.println("No properties found in the database.");
+            }
+        }
+        
+        System.out.println("-------------------------------------------------------------------------");
     }
 
 
@@ -140,44 +433,794 @@ public class Prog4Raw {
 
 
     private static void UpdateTupleInTable() {
-        throw new UnsupportedOperationException("Unimplemented method 'UpdateTupleInTable'");
+        System.out.println("\n--- Update Menu ---");
+        PrintTable();
+        int choice = getUserChoice();
+        
+        try {
+            switch (choice) {
+                case 1:
+                    UpdateMember();
+                    break;
+                case 2:
+                    UpdateSkiPass();
+                    break;
+                case 3:
+                    UpdateEquipment();
+                    break;
+                case 4:
+                    UpdateEquipmentRental();
+                    break;
+                case 5:
+                    UpdateLessonPurchase();
+                    break;
+                default:
+                    System.out.println("Invalid choice. Returning to main menu.");
+            }
+        } catch (SQLException e) {
+            System.err.println("*** SQLException: " + e.getMessage());
+            System.err.println("SQLState: " + e.getSQLState());
+            System.err.println("ErrorCode: " + e.getErrorCode());
+        }
+    }
+
+    private static void UpdateMember() throws SQLException {
+        System.out.print("Enter member ID to update: ");
+        int memberId = Integer.parseInt(scanner.nextLine().trim());
+        
+        PreparedStatement checkMember = connection.prepareStatement(
+            "SELECT * FROM Member WHERE MemberId = ?"
+        );
+        checkMember.setInt(1, memberId);
+        ResultSet memberResult = checkMember.executeQuery();
+        
+        if (!memberResult.next()) {
+            System.out.println("No member found with ID " + memberId);
+            return;
+        }
+        
+        System.out.println("\nCurrent member details:");
+        System.out.println("Name: " + memberResult.getString("Name"));
+        System.out.println("Phone: " + memberResult.getString("PhoneNumber"));
+        System.out.println("Email: " + memberResult.getString("EmailAddress"));
+        System.out.println("Emergency Contact: " + memberResult.getString("EmergencyContact"));
+        
+        System.out.println("\nSelect field to update:");
+        System.out.println("1. Phone Number");
+        System.out.println("2. Email Address");
+        System.out.println("3. Emergency Contact");
+        System.out.print("Enter choice (1-3): ");
+        
+        int updateChoice = Integer.parseInt(scanner.nextLine().trim());
+        String query = "";
+        String fieldName = "";
+        
+        switch (updateChoice) {
+            case 1:
+                fieldName = "PhoneNumber";
+                query = "UPDATE Member SET PhoneNumber = ? WHERE MemberID = ?";
+                break;
+            case 2:
+                fieldName = "EmailAddress";
+                query = "UPDATE Member SET EmailAddress = ? WHERE MemberID = ?";
+                break;
+            case 3:
+                fieldName = "EmergencyContact";
+                query = "UPDATE Member SET EmergencyContact = ? WHERE MemberID = ?";
+                break;
+            default:
+                System.out.println("Invalid choice. Update cancelled.");
+                return;
+        }
+        
+        System.out.print("Enter new " + fieldName.replace("_", " ") + ": ");
+        String newValue = scanner.nextLine().trim();
+        
+        PreparedStatement updateStmt = connection.prepareStatement(query);
+        updateStmt.setString(1, newValue);
+        updateStmt.setInt(2, memberId);
+        int rowsUpdated = updateStmt.executeUpdate();
+        
+        if (rowsUpdated > 0) {
+            System.out.println("Member information successfully updated.");
+        } else {
+            System.out.println("Update failed. Please try again.");
+        }
+    }
+
+    private static void UpdateSkiPass() throws SQLException {
+        System.out.print("Enter ski pass ID to update: ");
+        int passId = Integer.parseInt(scanner.nextLine().trim());
+    
+    
+        PreparedStatement checkPass = connection.prepareStatement(
+            "SELECT * FROM SkiPass WHERE PassID = ?"
+        );
+        checkPass.setInt(1, passId);
+        ResultSet passResult = checkPass.executeQuery();
+        
+        if (!passResult.next()) {
+            System.out.println("No ski pass found with ID " + passId);
+            return;
+        }
+        
+        System.out.println("\nCurrent ski pass details:");
+        System.out.println("Member ID: " + passResult.getInt("MemberID"));
+        System.out.println("Pass Type: " + passResult.getString("PassType"));
+        System.out.println("Activation Date: " + passResult.getDate("ActivationDate"));
+        System.out.println("Expiration Date: " + passResult.getDate("ExpirationDate"));
+        System.out.println("Purchase Date: " + passResult.getDate("PurchaseDate"));
+        System.out.println("Total Uses: " + passResult.getInt("TotalUses"));
+        System.out.println("Remaining Uses: " + passResult.getInt("RemainingUses"));
+        System.out.println("Price: $" + passResult.getDouble("Price"));
+        
+        System.out.println("\nSelect field to update:");
+        System.out.println("1. Remaining Uses");
+        System.out.println("2. Expiration Date");
+        System.out.print("Enter choice (1-2): ");
+        
+        int updateChoice = Integer.parseInt(scanner.nextLine().trim());
+        String query = "";
+        String fieldName = "";
+        
+        switch (updateChoice) {
+            case 1:
+                fieldName = "RemainingUses";
+                System.out.print("Enter new remaining uses value: ");
+                int newRemainingUses = Integer.parseInt(scanner.nextLine().trim());
+                
+                query = "UPDATE SkiPass SET RemainingUses = ? WHERE PassID = ?";
+                PreparedStatement updateUsesStmt = connection.prepareStatement(query);
+                updateUsesStmt.setInt(1, newRemainingUses);
+                updateUsesStmt.setInt(2, passId);
+                int usesRowsUpdated = updateUsesStmt.executeUpdate();
+                
+                if (usesRowsUpdated > 0) {
+                    System.out.println("Ski pass remaining uses successfully updated to " + newRemainingUses);
+                } else {
+                    System.out.println("Update failed. Please try again.");
+                }
+                break;
+                
+            case 2:
+                fieldName = "ExpirationDate";
+                System.out.print("Enter new expiration date (YYYY-MM-DD): ");
+                String dateStr = scanner.nextLine().trim();
+                
+                try {
+                    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+                    java.util.Date parsedDate = dateFormat.parse(dateStr);
+                    java.sql.Date sqlDate = new java.sql.Date(parsedDate.getTime());
+                    
+                    query = "UPDATE SkiPass SET ExpirationDate = ? WHERE PassID = ?";
+                    PreparedStatement updateDateStmt = connection.prepareStatement(query);
+                    updateDateStmt.setDate(1, sqlDate);
+                    updateDateStmt.setInt(2, passId);
+                    int dateRowsUpdated = updateDateStmt.executeUpdate();
+                    
+                    if (dateRowsUpdated > 0) {
+                        System.out.println("Ski pass expiration date successfully updated to " + dateStr);
+                    } else {
+                        System.out.println("Update failed. Please try again.");
+                    }
+                } catch (ParseException e) {
+                    System.out.println("Invalid date format. Please use YYYY-MM-DD format.");
+                }
+                break;
+                
+            default:
+                System.out.println("Invalid choice. Update cancelled.");
+                return;
+        }
+    }
+
+    private static void UpdateEquipment() throws SQLException {
+        System.out.print("Enter equipment ID to update: ");
+        int equipmentId = Integer.parseInt(scanner.nextLine().trim());
+        
+
+        PreparedStatement checkEquipment = connection.prepareStatement(
+            "SELECT * FROM Equipment WHERE EquipmentID = ?"
+        );
+        checkEquipment.setInt(1, equipmentId);
+        ResultSet equipmentResult = checkEquipment.executeQuery();
+        
+        if (!equipmentResult.next()) {
+            System.out.println("No equipment found with ID " + equipmentId);
+            return;
+        }
+        
+        System.out.println("\nCurrent equipment details:");
+        System.out.println("Equipment Type: " + equipmentResult.getString("EquipmentType"));
+        System.out.println("Equipment Size: " + equipmentResult.getString("EquipmentSize"));
+        System.out.println("Status: " + equipmentResult.getString("Status"));
+        
+        System.out.println("\nSelect field to update:");
+        System.out.println("1. Equipment Type");
+        System.out.println("2. Equipment Size");
+        System.out.println("3. Status");
+        System.out.print("Enter choice (1-3): ");
+        
+        int updateChoice = Integer.parseInt(scanner.nextLine().trim());
+        String query = "";
+        String fieldName = "";
+        
+        switch (updateChoice) {
+            case 1:
+                fieldName = "EquipmentType";
+                query = "UPDATE Equipment SET EquipmentType = ? WHERE EquipmentID = ?";
+                break;
+            case 2:
+                fieldName = "EquipmentSize";
+                query = "UPDATE Equipment SET EquipmentSize = ? WHERE EquipmentID = ?";
+                break;
+            case 3:
+                fieldName = "Status";
+                query = "UPDATE Equipment SET Status = ? WHERE EquipmentID = ?";
+                break;
+            default:
+                System.out.println("Invalid choice. Update cancelled.");
+                return;
+        }
+        
+        System.out.print("Enter new " + fieldName + ": ");
+        String newValue = scanner.nextLine().trim();
+        
+        PreparedStatement updateStmt = connection.prepareStatement(query);
+        updateStmt.setString(1, newValue);
+        updateStmt.setInt(2, equipmentId);
+        int rowsUpdated = updateStmt.executeUpdate();
+        
+        if (rowsUpdated > 0) {
+            System.out.println("Equipment information successfully updated.");
+            System.out.println("Change logged for audit purposes.");
+        } else {
+            System.out.println("Update failed. Please try again.");
+        }
+    }
+
+    private static void UpdateEquipmentRental() throws SQLException {
+        System.out.print("Enter rental ID to update: ");
+        int rentalId = Integer.parseInt(scanner.nextLine().trim());
+    
+        PreparedStatement checkRental = connection.prepareStatement(
+            "SELECT * FROM EquipmentRecord WHERE RentalID = ?"
+        );
+        checkRental.setInt(1, rentalId);
+        ResultSet rentalResult = checkRental.executeQuery();
+        
+        if (!rentalResult.next()) {
+            System.out.println("No rental record found with ID " + rentalId);
+            return;
+        }
+        
+        System.out.println("\nCurrent rental details:");
+        System.out.println("Member ID: " + rentalResult.getInt("EMemberID"));
+        System.out.println("Pass ID: " + rentalResult.getInt("EPassID"));
+        System.out.println("Return Status: " + rentalResult.getString("ReturnStatus"));
+        System.out.println("Rental Time: " + rentalResult.getTimestamp("RentalTime"));
+        
+        System.out.println("\nSelect field to update:");
+        System.out.println("1. Return Status");
+        System.out.print("Enter choice (1): ");
+        
+        int updateChoice = Integer.parseInt(scanner.nextLine().trim());
+        
+        if (updateChoice != 1) {
+            System.out.println("Invalid choice. Update cancelled.");
+            return;
+        }
+        
+        System.out.println("Enter new Return Status (e.g., Returned, Damaged, Not Picked Up): ");
+        String newStatus = scanner.nextLine().trim();
+        
+        // Check if the string is empty
+        if (newStatus.isEmpty()) {
+            System.out.println("Return status cannot be empty. Update cancelled.");
+            return;
+        }
+        
+        PreparedStatement updateStmt = connection.prepareStatement(
+            "UPDATE EquipmentRecord SET ReturnStatus = ? WHERE RentalID = ?"
+        );
+        updateStmt.setString(1, newStatus);
+        updateStmt.setInt(2, rentalId);
+        int rowsUpdated = updateStmt.executeUpdate();
+        
+        if (rowsUpdated > 0) {
+            System.out.println("Equipment rental return status successfully updated to \"" + newStatus + "\"");
+        } else {
+            System.out.println("Update failed. Please try again.");
+        }
+    }
+
+    private static void UpdateLessonPurchase() throws SQLException {
+        System.out.print("Enter lesson purchase ID to update: ");
+        int purchaseId = Integer.parseInt(scanner.nextLine().trim());
+        
+        PreparedStatement checkPurchase = connection.prepareStatement(
+            "SELECT * FROM LessonPurchase WHERE PurchaseID = ?"
+        );
+        checkPurchase.setInt(1, purchaseId);
+        ResultSet purchaseResult = checkPurchase.executeQuery();
+        
+        if (!purchaseResult.next()) {
+            System.out.println("No lesson purchase found with ID " + purchaseId);
+            return;
+        }
+        
+        System.out.println("\nCurrent lesson purchase details:");
+        System.out.println("Member ID: " + purchaseResult.getInt("LPMemberID"));
+        System.out.println("Lesson ID: " + purchaseResult.getInt("LPLessonID"));
+        System.out.println("Purchase ID: " + purchaseResult.getInt("PurchaseID"));
+        System.out.println("Remaining Sessions: " + purchaseResult.getInt("RemainingSessions"));
+        
+        System.out.println("\nSelect field to update:");
+        System.out.println("1. Remaining Sessions");
+        System.out.print("Enter choice (1): ");
+        
+        int updateChoice = Integer.parseInt(scanner.nextLine().trim());
+        
+        if (updateChoice != 1) {
+            System.out.println("Invalid choice. Update cancelled.");
+            return;
+        }
+        
+        System.out.print("Enter new Remaining Sessions value: ");
+        int newRemainingSessions = Integer.parseInt(scanner.nextLine().trim());
+        
+        if (newRemainingSessions < 0) {
+            System.out.println("Invalid value. Remaining sessions cannot be negative. Update cancelled.");
+            return;
+        }
+        
+        PreparedStatement updateStmt = connection.prepareStatement(
+            "UPDATE LessonPurchase SET RemainingSessions = ? WHERE PurchaseID = ?"
+        );
+        updateStmt.setInt(1, newRemainingSessions);
+        updateStmt.setInt(2, purchaseId);
+        int rowsUpdated = updateStmt.executeUpdate();
+        
+        if (rowsUpdated > 0) {
+            System.out.println("Lesson purchase remaining sessions successfully updated to " + newRemainingSessions);
+        } else {
+            System.out.println("Update failed. Please try again.");
+        }
     }
 
 
     private static void AddTupleToTable() {
-        System.out.println("Please enter a table to add to");
+        System.out.println("\nPlease enter a table to add to");
         PrintTable();
         int choice = getUserChoice();
-        switch (choice) {
-            case (1):
-                AddMemberQuery();
-                break;
-            case (2):
-                AddSkiPassQuery();
-                break;
-            case (3):
-                AddEquipmentQuery();
-            case (4):
-                AddEquipmentQuery();
-            case (5):
-                AddLessonPurchaseQuery();
+        
+        try {
+            switch (choice) {
+                case 1:
+                    AddMemberQuery();
+                    break;
+                case 2:
+                    AddSkiPassQuery();
+                    break;
+                case 3:
+                    AddEquipmentQuery();
+                    break;
+                case 4:
+                    AddEquipmentRentalQuery();
+                    break;
+                case 5:
+                    AddLessonPurchaseQuery();
+                    break;
+                default:
+                    System.out.println("Invalid choice. Returning to main menu.");
+            }
+        } catch (SQLException e) {
+            System.err.println("*** SQLException: " + e.getMessage());
+            System.err.println("SQLState: " + e.getSQLState());
+            System.err.println("ErrorCode: " + e.getErrorCode());
         }
     }
 
-    private static void AddLessonPurchaseQuery() {
-        throw new UnsupportedOperationException("Unimplemented method 'AddLessonPurchaseQuery'");
+    private static void AddMemberQuery() throws SQLException {
+        System.out.println("\n--- Add New Member ---");
+        
+        System.out.print("Enter member name: ");
+        String name = scanner.nextLine().trim();
+        
+        System.out.print("Enter phone number: ");
+        String phoneNumber = scanner.nextLine().trim();
+        
+        System.out.print("Enter email address: ");
+        String emailAddress = scanner.nextLine().trim();
+        
+        System.out.print("Enter emergency contact: ");
+        String emergencyContact = scanner.nextLine().trim();
+        
+        // Generate a random member ID between 1 and 1,000,000
+        Random random = new Random();
+        int memberId = random.nextInt(1000000) + 1;
+        
+        // Check if the ID already exists
+        PreparedStatement checkId = connection.prepareStatement(
+            "SELECT COUNT(*) FROM Member WHERE MemberID = ?"
+        );
+        
+        boolean idExists = true;
+        while (idExists) {
+            checkId.setInt(1, memberId);
+            ResultSet rs = checkId.executeQuery();
+            rs.next();
+            if (rs.getInt(1) == 0) {
+                idExists = false;
+            } else {
+                memberId = random.nextInt(1000000) + 1;
+            }
+        }
+        
+        PreparedStatement insertStmt = connection.prepareStatement(
+            "INSERT INTO Member (MemberID, Name, PhoneNumber, EmailAddress, EmergencyContact) " +
+            "VALUES (?, ?, ?, ?, ?)",
+            new String[] {"MemberID"}  
+        );
+        
+        insertStmt.setInt(1, memberId);
+        insertStmt.setString(2, name);
+        insertStmt.setString(3, phoneNumber);
+        insertStmt.setString(4, emailAddress);
+        insertStmt.setString(5, emergencyContact);
+        
+        int rowsInserted = insertStmt.executeUpdate();
+        
+        if (rowsInserted > 0) {
+            System.out.println("Member successfully added with ID: " + memberId);
+        } else {
+            System.out.println("Failed to add member. Please try again.");
+        }
     }
-
-    private static void AddEquipmentQuery() {
-        throw new UnsupportedOperationException("Unimplemented method 'AddEquipmentQuery'");
+    
+    private static void AddSkiPassQuery() throws SQLException {
+        System.out.println("\n--- Add New Ski Pass ---");
+        
+        System.out.print("Enter member ID: ");
+        int memberId = Integer.parseInt(scanner.nextLine().trim());
+        
+        PreparedStatement checkMember = connection.prepareStatement(
+            "SELECT COUNT(*) FROM Member WHERE MemberID = ?"
+        );
+        checkMember.setInt(1, memberId);
+        ResultSet memberResult = checkMember.executeQuery();
+        memberResult.next();
+        
+        if (memberResult.getInt(1) == 0) {
+            System.out.println("Error: Member with ID " + memberId + " does not exist.");
+            return;
+        }
+        
+        System.out.print("Enter pass type: ");
+        String passType = scanner.nextLine().trim();
+        
+        System.out.print("Enter activation date (YYYY-MM-DD): ");
+        String activationDateStr = scanner.nextLine().trim();
+        
+        System.out.print("Enter expiration date (YYYY-MM-DD): ");
+        String expirationDateStr = scanner.nextLine().trim();
+        
+        System.out.print("Enter total uses: ");
+        int totalUses = Integer.parseInt(scanner.nextLine().trim());
+        
+        System.out.print("Enter price: ");
+        double price = Double.parseDouble(scanner.nextLine().trim());
+        
+        // Generate a random pass ID between 1 and 1,000,000
+        Random random = new Random();
+        int passId = random.nextInt(1000000) + 1;
+        
+        // Check if the ID already exists
+        PreparedStatement checkId = connection.prepareStatement(
+            "SELECT COUNT(*) FROM SkiPass WHERE PassID = ?"
+        );
+        
+        boolean idExists = true;
+        while (idExists) {
+            checkId.setInt(1, passId);
+            ResultSet rs = checkId.executeQuery();
+            rs.next();
+            if (rs.getInt(1) == 0) {
+                idExists = false;
+            } else {
+                passId = random.nextInt(1000000) + 1;
+            }
+        }
+        
+        try {
+            SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+            java.util.Date parsedActivationDate = dateFormat.parse(activationDateStr);
+            java.sql.Date activationDate = new java.sql.Date(parsedActivationDate.getTime());
+            
+            java.util.Date parsedExpirationDate = dateFormat.parse(expirationDateStr);
+            java.sql.Date expirationDate = new java.sql.Date(parsedExpirationDate.getTime());
+            
+            java.sql.Timestamp purchaseDate = new java.sql.Timestamp(System.currentTimeMillis());
+            
+            PreparedStatement insertStmt = connection.prepareStatement(
+                "INSERT INTO SkiPass (PassID, MemberID, PassType, ActivationDate, ExpirationDate, " +
+                "PurchaseDate, TotalUses, RemainingUses, Price) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            );
+            
+            insertStmt.setInt(1, passId);
+            insertStmt.setInt(2, memberId);
+            insertStmt.setString(3, passType);
+            insertStmt.setDate(4, activationDate);
+            insertStmt.setDate(5, expirationDate);
+            insertStmt.setTimestamp(6, purchaseDate);
+            insertStmt.setInt(7, totalUses);
+            insertStmt.setInt(8, totalUses);  
+            insertStmt.setDouble(9, price);
+            
+            int rowsInserted = insertStmt.executeUpdate();
+            
+            if (rowsInserted > 0) {
+                System.out.println("Ski pass successfully added with ID: " + passId);
+            } else {
+                System.out.println("Failed to add ski pass. Please try again.");
+            }
+        } catch (ParseException e) {
+            System.out.println("Invalid date format. Please use YYYY-MM-DD format.");
+        }
     }
-
-    private static void AddSkiPassQuery() {
-        throw new UnsupportedOperationException("Unimplemented method 'AddSkiPassQuery'");
+    
+    private static void AddEquipmentQuery() throws SQLException {
+        System.out.println("\n--- Add New Equipment ---");
+        
+        System.out.print("Enter equipment type: ");
+        String equipmentType = scanner.nextLine().trim();
+        
+        System.out.print("Enter equipment size: ");
+        String equipmentSize = scanner.nextLine().trim();
+        
+        System.out.print("Enter status (Available/Maintenance/Retired): ");
+        String status = scanner.nextLine().trim();
+        
+        if (!status.equalsIgnoreCase("Available") && 
+            !status.equalsIgnoreCase("Maintenance") && 
+            !status.equalsIgnoreCase("Retired")) {
+            System.out.println("Invalid status. Must be 'Available', 'Maintenance', or 'Retired'.");
+            return;
+        }
+        
+        // Generate a random equipment ID between 1 and 1,000,000
+        Random random = new Random();
+        int equipmentId = random.nextInt(1000000) + 1;
+        
+        // Check if the ID already exists
+        PreparedStatement checkId = connection.prepareStatement(
+            "SELECT COUNT(*) FROM Equipment WHERE EquipmentID = ?"
+        );
+        
+        boolean idExists = true;
+        while (idExists) {
+            checkId.setInt(1, equipmentId);
+            ResultSet rs = checkId.executeQuery();
+            rs.next();
+            if (rs.getInt(1) == 0) {
+                idExists = false;
+            } else {
+                equipmentId = random.nextInt(1000000) + 1;
+            }
+        }
+        
+        PreparedStatement insertStmt = connection.prepareStatement(
+            "INSERT INTO Equipment (EquipmentID, EquipmentType, EquipmentSize, Status) " +
+            "VALUES (?, ?, ?, ?)"
+        );
+        
+        insertStmt.setInt(1, equipmentId);
+        insertStmt.setString(2, equipmentType);
+        insertStmt.setString(3, equipmentSize);
+        insertStmt.setString(4, status);
+        
+        int rowsInserted = insertStmt.executeUpdate();
+        
+        if (rowsInserted > 0) {
+            System.out.println("Equipment successfully added with ID: " + equipmentId);
+        } else {
+            System.out.println("Failed to add equipment. Please try again.");
+        }
     }
-
-    private static void AddMemberQuery() {
-        throw new UnsupportedOperationException("Unimplemented method 'AddMemberQuery'");
+    
+    private static void AddEquipmentRentalQuery() throws SQLException {
+        System.out.println("\n--- Add New Equipment Rental ---");
+        
+        System.out.print("Enter member ID: ");
+        int memberId = Integer.parseInt(scanner.nextLine().trim());
+        
+        PreparedStatement checkMember = connection.prepareStatement(
+            "SELECT COUNT(*) FROM Member WHERE MemberID = ?"
+        );
+        checkMember.setInt(1, memberId);
+        ResultSet memberResult = checkMember.executeQuery();
+        memberResult.next();
+        
+        if (memberResult.getInt(1) == 0) {
+            System.out.println("Error: Member with ID " + memberId + " does not exist.");
+            return;
+        }
+        
+        System.out.print("Enter pass ID: ");
+        int passId = Integer.parseInt(scanner.nextLine().trim());
+        
+        PreparedStatement checkPass = connection.prepareStatement(
+            "SELECT COUNT(*) FROM SkiPass WHERE PassID = ? AND MemberID = ? " +
+            "AND ExpirationDate >= SYSDATE AND RemainingUses > 0"
+        );
+        checkPass.setInt(1, passId);
+        checkPass.setInt(2, memberId);
+        ResultSet passResult = checkPass.executeQuery();
+        passResult.next();
+        
+        if (passResult.getInt(1) == 0) {
+            System.out.println("Error: No valid ski pass found for this member with ID " + passId);
+            return;
+        }
+        
+        System.out.print("Enter equipment ID: ");
+        int equipmentId = Integer.parseInt(scanner.nextLine().trim());
+        
+        PreparedStatement checkEquipment = connection.prepareStatement(
+            "SELECT COUNT(*) FROM Equipment WHERE EquipmentID = ? AND Status = 'Available'"
+        );
+        checkEquipment.setInt(1, equipmentId);
+        ResultSet equipmentResult = checkEquipment.executeQuery();
+        equipmentResult.next();
+        
+        if (equipmentResult.getInt(1) == 0) {
+            System.out.println("Error: No available equipment found with ID " + equipmentId);
+            return;
+        }
+        
+        // Generate a random rental ID between 1 and 1,000,000
+        Random random = new Random();
+        int rentalId = random.nextInt(1000000) + 1;
+        
+        // Check if the ID already exists
+        PreparedStatement checkId = connection.prepareStatement(
+            "SELECT COUNT(*) FROM EquipmentRecord WHERE RentalID = ?"
+        );
+        
+        boolean idExists = true;
+        while (idExists) {
+            checkId.setInt(1, rentalId);
+            ResultSet rs = checkId.executeQuery();
+            rs.next();
+            if (rs.getInt(1) == 0) {
+                idExists = false;
+            } else {
+                rentalId = random.nextInt(1000000) + 1;
+            }
+        }
+        
+        java.sql.Timestamp rentalTime = new java.sql.Timestamp(System.currentTimeMillis());
+        
+        PreparedStatement insertStmt = connection.prepareStatement(
+            "INSERT INTO EquipmentRecord (RentalID, EMemberID, EPassID, ReturnStatus, RentalTime) " +
+            "VALUES (?, ?, ?, 'N', ?)"
+        );
+        
+        insertStmt.setInt(1, rentalId);
+        insertStmt.setInt(2, memberId);
+        insertStmt.setInt(3, passId);
+        insertStmt.setTimestamp(4, rentalTime);
+        
+        connection.setAutoCommit(false);
+        
+        try {
+            int rowsInserted = insertStmt.executeUpdate();
+            
+            PreparedStatement updateEquipment = connection.prepareStatement(
+                "UPDATE Equipment SET Status = 'In Use' WHERE EquipmentID = ?"
+            );
+            updateEquipment.setInt(1, equipmentId);
+            updateEquipment.executeUpdate();
+            
+            PreparedStatement updatePass = connection.prepareStatement(
+                "UPDATE SkiPass SET RemainingUses = RemainingUses - 1 WHERE PassID = ?"
+            );
+            updatePass.setInt(1, passId);
+            updatePass.executeUpdate();
+            
+            connection.commit();
+            
+            if (rowsInserted > 0) {
+                System.out.println("Equipment rental successfully added with ID: " + rentalId);
+            } else {
+                System.out.println("Failed to add equipment rental. Please try again.");
+            }
+        } catch (SQLException e) {
+            connection.rollback();
+            throw e;
+        } finally {
+            connection.setAutoCommit(true);
+        }
+    }
+    
+    private static void AddLessonPurchaseQuery() throws SQLException {
+        System.out.println("\n--- Add New Lesson Purchase ---");
+        
+        System.out.print("Enter member ID: ");
+        int memberId = Integer.parseInt(scanner.nextLine().trim());
+        
+        PreparedStatement checkMember = connection.prepareStatement(
+            "SELECT COUNT(*) FROM Member WHERE MemberID = ?"
+        );
+        checkMember.setInt(1, memberId);
+        ResultSet memberResult = checkMember.executeQuery();
+        memberResult.next();
+        
+        if (memberResult.getInt(1) == 0) {
+            System.out.println("Error: Member with ID " + memberId + " does not exist.");
+            return;
+        }
+        
+        System.out.print("Enter lesson ID: ");
+        int lessonId = Integer.parseInt(scanner.nextLine().trim());
+        
+        PreparedStatement checkLesson = connection.prepareStatement(
+            "SELECT COUNT(*) FROM Lesson WHERE LessonID = ?"
+        );
+        checkLesson.setInt(1, lessonId);
+        ResultSet lessonResult = checkLesson.executeQuery();
+        lessonResult.next();
+        
+        if (lessonResult.getInt(1) == 0) {
+            System.out.println("Error: Lesson with ID " + lessonId + " does not exist.");
+            return;
+        }
+        
+        System.out.print("Enter number of sessions to purchase: ");
+        int sessions = Integer.parseInt(scanner.nextLine().trim());
+        
+        if (sessions <= 0) {
+            System.out.println("Error: Number of sessions must be greater than zero.");
+            return;
+        }
+        
+        Random random = new Random();
+        int purchaseId = random.nextInt(1000000) + 1;
+        
+        PreparedStatement checkId = connection.prepareStatement(
+            "SELECT COUNT(*) FROM LessonPurchase WHERE PurchaseID = ?"
+        );
+        
+        boolean idExists = true;
+        while (idExists) {
+            checkId.setInt(1, purchaseId);
+            ResultSet rs = checkId.executeQuery();
+            rs.next();
+            if (rs.getInt(1) == 0) {
+                idExists = false;
+            } else {
+                purchaseId = random.nextInt(1000000) + 1;
+            }
+        }
+        
+        PreparedStatement insertStmt = connection.prepareStatement(
+            "INSERT INTO LessonPurchase (PurchaseID, LPMemberID, LPLessonID, RemainingSessions) " +
+            "VALUES (?, ?, ?, ?)"
+        );
+        
+        insertStmt.setInt(1, purchaseId);
+        insertStmt.setInt(2, memberId);
+        insertStmt.setInt(3, lessonId);
+        insertStmt.setInt(4, sessions);
+        
+        int rowsInserted = insertStmt.executeUpdate();
+        
+        if (rowsInserted > 0) {
+            System.out.println("Lesson purchase successfully added with ID: " + purchaseId);
+        } else {
+            System.out.println("Failed to add lesson purchase. Please try again.");
+        }
     }
 
     private static void PrintTable() {
@@ -186,286 +1229,5 @@ public class Prog4Raw {
         System.out.println("3. Equipment");
         System.out.println("4. Equipment Record");
         System.out.println("5. Lesson Purchase");
-    }
-    
-
-    // private static void processQuery1() {
-    //     try {
-    //         int year = getValidYear();
-    //         String tableName = getTableNameForYear(year);
-            
-    //         if (tableName == null) {
-    //             System.out.println("Error: Invalid year.");
-    //             return;
-    //         }
-            
-    //         String category = getValidCategory();
-    //         String columnName = categoryToColumnName(category);
-    //         String query = "SELECT * FROM (" +
-    //                 "SELECT state, " + columnName + " AS registrations " +
-    //                 "FROM " + tableName + " " +
-    //                 "ORDER BY " + columnName + " DESC" +
-    //                 ") WHERE ROWNUM <= 10";
-            
-    //         try (Statement stmt = connection.createStatement();
-    //              ResultSet rs = stmt.executeQuery(query)) {
-                
-    //             System.out.println("\n--- Top 10 States for " + category + " Registrations in " + year + " ---");
-    //             System.out.printf("%-25s %-15s\n", "State", "Registrations");
-    //             System.out.println("------------------------------------------------");
-                
-    //             while (rs.next()) {
-    //                 String state = rs.getString("state");
-    //                 int registrations = rs.getInt("registrations");
-    //                 System.out.printf("%-25s %-15d\n", state, registrations);
-    //             }
-    //         }
-    //     } catch (SQLException e) {
-    //         System.err.println("*** SQLException: "
-    //             + "Could not execute query.");
-    //         System.err.println("\tMessage:   " + e.getMessage());
-    //         System.err.println("\tSQLState:  " + e.getSQLState());
-    //         System.err.println("\tErrorCode: " + e.getErrorCode());
-    //     }
-    // }
-    
-    // private static void processQuery2() {
-    //     try {
-    //         System.out.println("\n--- States with Fewer Than 1 Million Total Registrations ---");
-    //         System.out.printf("%-10s %-15s\n", "Year", "Count");
-    //         System.out.println("-------------------------");
-            
-    //         int[] years = {1990, 2000, 2010, 2020};
-            
-    //         for (int year : years) {
-    //             String tableName = getTableNameForYear(year);
-                
-    //             String query = "SELECT COUNT(*) AS state_count " +
-    //                           "FROM " + tableName + " " +
-    //                           "WHERE (auto + bus + truck + motorcycle) < 1000000";
-                
-    //             try (Statement stmt = connection.createStatement();
-    //                  ResultSet rs = stmt.executeQuery(query)) {
-                    
-    //                 if (rs.next()) {
-    //                     int count = rs.getInt("state_count");
-    //                     System.out.printf("%-10d %-15d\n", year, count);
-    //                 }
-    //             }
-    //         }
-    //     } catch (SQLException e) {
-    //         System.err.println("*** SQLException: "
-    //             + "Could not execute query.");
-    //         System.err.println("\tMessage:   " + e.getMessage());
-    //         System.err.println("\tSQLState:  " + e.getSQLState());
-    //         System.err.println("\tErrorCode: " + e.getErrorCode());
-    //     }
-    // }
-    
-    // private static void processQuery3() {
-    //     try {
-    //         String state = getValidState();
-            
-    //         System.out.println("\n--- Truck vs. Auto Registration Percentage for " + state + " ---");
-    //         System.out.printf("%-10s %-20s\n", "Year", "Percentage Difference");
-    //         System.out.println("-----------------------------------");
-            
-    //         int[] years = {1990, 2000, 2010, 2020};
-            
-    //         for (int year : years) {
-    //             String tableName = getTableNameForYear(year);
-                
-    //             String query = "SELECT auto, truck FROM " + tableName + " WHERE UPPER(state) = '" + 
-    //                           state.toUpperCase() + "'";
-                
-    //             try (Statement stmt = connection.createStatement();
-    //                  ResultSet rs = stmt.executeQuery(query)) {
-                    
-    //                 if (rs.next()) {
-    //                     int autos = rs.getInt("auto");
-    //                     int trucks = rs.getInt("truck");
-    //                     double percentage;
-    //                     if (autos == 0) {
-    //                         percentage = trucks > 0 ? Double.POSITIVE_INFINITY : 0;
-    //                     } else {
-    //                         // By Formula: ((trucks - autos) / autos) * 100
-    //                         percentage = ((double)(trucks - autos) / autos) * 100;
-    //                     }
-    //                     if (Double.isInfinite(percentage)) {
-    //                         System.out.printf("%-10d %-20s\n", year, "Infinite (No autos registered)");
-    //                     } else {
-    //                         String prefix = percentage >= 0 ? "+" : "";
-    //                         System.out.printf("%-10d %s%.2f%%\n", year, prefix, percentage);
-    //                     }
-    //                 } else {
-    //                     System.out.printf("%-10d %-20s\n", year, "No data available");
-    //                 }
-    //             }
-    //         }
-    //     } catch (SQLException e) {
-    //         System.err.println("*** SQLException: "
-    //             + "Could not execute query.");
-    //         System.err.println("\tMessage:   " + e.getMessage());
-    //         System.err.println("\tSQLState:  " + e.getSQLState());
-    //         System.err.println("\tErrorCode: " + e.getErrorCode());
-    //     }
-    // }
-
-    // private static void processQuery4() {
-    //     try {
-    //         System.out.println("\nAvailable regions: Northeast, Southeast, Midwest, Southwest, West");
-    //         System.out.print("Enter a region: ");
-    //         String region = scanner.nextLine().trim();
-    //         String stateList = getStatesInRegion(region);
-            
-    //         if (stateList == null) {
-    //             System.out.println("Error: Invalid region. Please try again.");
-    //             return;
-    //         }
-            
-    //         System.out.println("\n--- Average Motorcycle Registration Growth by Decade for " + region + " Region ---");
-    //         System.out.printf("%-20s %-20s\n", "Decade Comparison", "Average Growth (%)");
-    //         System.out.println("------------------------------------------------");
-            
-    //         // Compare 1990 to 2000
-    //         compareDecades(1990, 2000, stateList);
-            
-    //         // Compare 2000 to 2010
-    //         compareDecades(2000, 2010, stateList);
-            
-    //         // Compare 2010 to 2020
-    //         compareDecades(2010, 2020, stateList);
-            
-    //     } catch (SQLException e) {
-    //         System.err.println("*** SQLException: "
-    //             + "Could not execute query.");
-    //         System.err.println("\tMessage:   " + e.getMessage());
-    //         System.err.println("\tSQLState:  " + e.getSQLState());
-    //         System.err.println("\tErrorCode: " + e.getErrorCode());
-    //     }
-    // }
-
-    // private static void compareDecades(int startYear, int endYear, String stateList) throws SQLException {
-    //     String startTable = getTableNameForYear(startYear);
-    //     String endTable = getTableNameForYear(endYear);
-        
-    //     String query = 
-    //         "SELECT AVG((e.motorcycle - s.motorcycle) / NULLIF(s.motorcycle, 0) * 100) AS avg_growth " +
-    //         "FROM " + startTable + " s JOIN " + endTable + " e ON s.state = e.state " +
-    //         "WHERE UPPER(s.state) IN (" + stateList + ")";
-        
-    //     try (Statement stmt = connection.createStatement();
-    //          ResultSet rs = stmt.executeQuery(query)) {
-            
-    //         if (rs.next()) {
-    //             Double avgGrowth = rs.getDouble("avg_growth");
-    //             if (rs.wasNull()) {
-    //                 System.out.printf("%-20s %-20s\n", startYear + " to " + endYear, "N/A (Division by zero)");
-    //             } else {
-    //                 System.out.printf("%-20s %-20.2f%%\n", startYear + " to " + endYear, avgGrowth);
-    //             }
-    //         } else {
-    //             System.out.printf("%-20s %-20s\n", startYear + " to " + endYear, "No data available");
-    //         }
-    //     }
-    // }
-
-    // private static String getStatesInRegion(String region) {
-    //     region = region.toLowerCase();
-        
-    //     StringBuilder states = new StringBuilder();
-        
-    //     switch (region) {
-    //         case "northeast":
-    //             states.append("'MAINE', 'NEW HAMPSHIRE', 'VERMONT', 'MASSACHUSETTS', 'RHODE ISLAND', ");
-    //             states.append("'CONNECTICUT', 'NEW YORK', 'NEW JERSEY', 'PENNSYLVANIA'");
-    //             break;
-    //         case "southeast":
-    //             states.append("'DELAWARE', 'MARYLAND', 'DISTRICT OF COLUMBIA', 'VIRGINIA', 'WEST VIRGINIA', ");
-    //             states.append("'NORTH CAROLINA', 'SOUTH CAROLINA', 'GEORGIA', 'FLORIDA', 'KENTUCKY', 'TENNESSEE', ");
-    //             states.append("'ALABAMA', 'MISSISSIPPI', 'ARKANSAS', 'LOUISIANA'");
-    //             break;
-    //         case "midwest":
-    //             states.append("'OHIO', 'INDIANA', 'ILLINOIS', 'MICHIGAN', 'WISCONSIN', 'MINNESOTA', ");
-    //             states.append("'IOWA', 'MISSOURI', 'NORTH DAKOTA', 'SOUTH DAKOTA', 'NEBRASKA', 'KANSAS'");
-    //             break;
-    //         case "southwest":
-    //             states.append("'OKLAHOMA', 'TEXAS', 'NEW MEXICO', 'ARIZONA'");
-    //             break;
-    //         case "west":
-    //             states.append("'MONTANA', 'IDAHO', 'WYOMING', 'COLORADO', 'UTAH', 'NEVADA', ");
-    //             states.append("'WASHINGTON', 'OREGON', 'CALIFORNIA', 'ALASKA', 'HAWAII'");
-    //             break;
-    //         default:
-    //             return null;
-    //     }
-        
-    //     return states.toString();
-    // }
-    
-
-    // private static String getTableNameForYear(int year) {
-    //     switch (year) {
-    //         case 1990:
-    //             return TABLE_1990;
-    //         case 2000:
-    //             return TABLE_2000;
-    //         case 2010:
-    //             return TABLE_2010;
-    //         case 2020:
-    //             return TABLE_2020;
-    //         default:
-    //             return null;
-    //     }
-    // }
-
-    // private static int getValidYear() {
-    //     int year = 0;
-    //     boolean validInput = false;
-        
-    //     while (!validInput) {
-    //         System.out.print("\nEnter year (1990, 2000, 2010, or 2020): ");
-    //         try {
-    //             year = Integer.parseInt(scanner.nextLine().trim());
-    //             if (year == 1990 || year == 2000 || year == 2010 || year == 2020) {
-    //                 validInput = true;
-    //             } else {
-    //                 System.out.println("Invalid year. Please enter 1990, 2000, 2010, or 2020.");
-    //             }
-    //         } catch (NumberFormatException e) {
-    //             System.out.println("Invalid input. Please enter a valid year.");
-    //         }
-    //     }
-        
-    //     return year;
-    // }
-    
-    // private static String getValidCategory() {
-    //     String category = "";
-    //     boolean validInput = false;
-        
-    //     while (!validInput) {
-    //         System.out.print("Enter vehicle category (auto, bus, truck, or motorcycle): ");
-    //         category = scanner.nextLine().trim().toLowerCase();
-            
-    //         if (category.equals("auto") || category.equals("bus") || 
-    //             category.equals("truck") || category.equals("motorcycle")) {
-    //             validInput = true;
-    //         } else {
-    //             System.out.println("Invalid category. Please enter auto, bus, truck, or motorcycle.");
-    //         }
-    //     }
-        
-    //     return category;
-    // }
-
-    // private static String getValidState() {
-    //     System.out.print("\nEnter state name: ");
-    //     return scanner.nextLine().trim();
-    // }
-    
-
-    // private static String categoryToColumnName(String category) {
-    //     return category.toLowerCase();
-    // }
+    }   
 }
