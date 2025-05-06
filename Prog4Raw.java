@@ -172,7 +172,7 @@ public class Prog4Raw {
             System.err.println("ErrorCode: " + e.getErrorCode());
         }
     }
-    
+
     private static void queryMemberLessons() throws SQLException {
         System.out.print("Enter member ID: ");
         int memberId = Integer.parseInt(scanner.nextLine().trim());
@@ -426,11 +426,296 @@ public class Prog4Raw {
         System.out.println("-------------------------------------------------------------------------");
     }
 
-
+   
     private static void DeleteTupleFromTable() {
-        throw new UnsupportedOperationException("Unimplemented method 'DeleteTupleFromTable'");
+        System.out.println("Please enter a table to delete from");
+        PrintTable();
+        int choice = getUserChoice();
+        switch (choice) {
+            case (1):
+                DeleteMemberQuery();
+                break;
+            case (2):
+                DeleteSkiPassQuery();
+                break;
+            case (3):
+                DeleteEquipmentQuery();
+                break;
+            case (4):
+                DeleteEquipmentRecordQuery();
+                break;
+            case (5):
+                DeleteLessonPurchaseQuery();
+                break;
+        }
     }
 
+    private static void DeleteLessonPurchaseQuery() {
+        System.out.println("Enter Lesson Purchase ID to delete:");
+    
+        int purchaseId;
+        try {
+            purchaseId = Integer.parseInt(scanner.nextLine().trim());
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid purchase ID format.");
+            return;
+        }
+    
+        if (!checkIfExists("SELECT COUNT(*) FROM LessonPurchase WHERE PurchaseID = " + purchaseId)) {
+            System.out.println("Lesson purchase record does not exist.");
+            return;
+        }
+    
+        // if (!checkIfExists(
+        //     "SELECT COUNT(*) FROM LessonPurchase WHERE PurchaseID = " + purchaseId +
+        //     " AND RemainingSessions = TotalSessions"
+        // )) {
+        //     System.out.println("Cannot delete. Some sessions have already been used.");
+        //     return;
+        // }
+    
+        try {
+            Statement stmt = connection.createStatement();
+    
+            stmt.executeUpdate("DELETE FROM LessonPurchase WHERE PurchaseID = " + purchaseId);
+    
+            System.out.println("Lesson purchase record successfully deleted.");
+    
+        } catch (SQLException e) {
+            System.err.println("*** SQLException during lesson purchase deletion:");
+            System.err.println("\tMessage:   " + e.getMessage());
+            System.err.println("\tSQLState:  " + e.getSQLState());
+            System.err.println("\tErrorCode: " + e.getErrorCode());
+        }
+    }
+    
+
+    private static void DeleteEquipmentRecordQuery() {
+        System.out.println("Enter Rental ID of equipment record to delete:");
+    
+        int rentalId;
+        try {
+            rentalId = Integer.parseInt(scanner.nextLine().trim());
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Rental ID format.");
+            return;
+        }
+    
+        // Step 1: Check if record exists
+        if (!checkIfExists("SELECT COUNT(*) FROM EquipmentRecord WHERE RentalID = " + rentalId)) {
+            System.out.println("Equipment rental record does not exist.");
+            return;
+        }
+    
+        try {
+            Statement stmt = connection.createStatement();
+
+            stmt.executeUpdate(
+            "INSERT INTO ArchivedEquipmentRecord (RentalID, EMemberID, EPassID, RentalTime, ReturnStatus, EquipmentID) " +
+            "SELECT RentalID, EMemberID, EPassID, RentalTime, ReturnStatus, EquipmentID " +
+            "FROM EquipmentRecord WHERE RentalID = " + rentalId
+        );
+    
+            stmt.executeUpdate("DELETE FROM EquipmentRecord WHERE RentalID = " + rentalId);
+    
+            System.out.println("Equipment record successfully deleted and logged.");
+    
+        } catch (SQLException e) {
+            System.err.println("*** SQLException during equipment record deletion:");
+            System.err.println("\tMessage:   " + e.getMessage());
+            System.err.println("\tSQLState:  " + e.getSQLState());
+            System.err.println("\tErrorCode: " + e.getErrorCode());
+        }
+    }
+    
+
+    private static void DeleteEquipmentQuery() {
+        System.out.println("Enter Equipment ID to delete:");
+    
+        int equipmentId;
+        try {
+            equipmentId = Integer.parseInt(scanner.nextLine().trim());
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Equipment ID format.");
+            return;
+        }
+    
+        // Step 1: Confirm equipment exists
+        if (!checkIfExists("SELECT COUNT(*) FROM Equipment WHERE EquipmentID = " + equipmentId)) {
+            System.out.println("Equipment does not exist.");
+            return;
+        }
+    
+        // Step 2: Check status is 'Retired' or 'Lost'
+        if (!checkIfExists(
+            "SELECT COUNT(*) FROM Equipment WHERE EquipmentID = " + equipmentId +
+            " AND Status IN ('Retired', 'Lost')"
+        )) {
+            System.out.println("Equipment cannot be deleted. Status must be 'Retired' or 'Lost'.");
+            return;
+        }
+    
+        // Step 3: Check that equipment is NOT currently rented out
+        if (checkIfExists(
+            "SELECT COUNT(*) FROM EquipmentRecord WHERE EquipmentID = " + equipmentId +
+            " AND ReturnStatus = 'Rented'"
+        )) {
+            System.out.println("Equipment is currently rented. Cannot delete.");
+            return;
+        }
+    
+        try {
+            Statement stmt = connection.createStatement();
+    
+            // Step 4: Archive the equipment
+            stmt.executeUpdate(
+                "INSERT INTO ArchivedEquipment (EquipmentID, EquipmentType, EquipmentSize, Status) " +
+                "SELECT EquipmentID, EquipmentType, EquipmentSize, Status " +
+                "FROM Equipment WHERE EquipmentID = " + equipmentId
+            );
+    
+            // Step 5: Delete from Equipment table
+            stmt.executeUpdate("DELETE FROM Equipment WHERE EquipmentID = " + equipmentId);
+    
+            System.out.println("Equipment successfully archived and deleted.");
+    
+        } catch (SQLException e) {
+            System.err.println("*** SQLException during equipment deletion:");
+            System.err.println("\tMessage:   " + e.getMessage());
+            System.err.println("\tSQLState:  " + e.getSQLState());
+            System.err.println("\tErrorCode: " + e.getErrorCode());
+        }
+    }
+    
+
+    private static void DeleteSkiPassQuery() {
+        System.out.println("Please enter Ski Pass ID to delete:");
+    
+        int passId;
+        try {
+            passId = Integer.parseInt(scanner.nextLine().trim());
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Ski Pass ID.");
+            return;
+        }
+
+         // Check if member exists
+        if (!checkIfExists("SELECT COUNT(*) FROM SkiPass WHERE PassID = " + passId)) {
+            System.out.println("Ski Pass doesn't exist!");
+            return;
+        }
+
+        if (!checkIfExists("SELECT COUNT(*) FROM SkiPass " +
+                "WHERE PassID = " + passId +
+                " AND RemainingUses = 0 AND ExpirationDate < SYSDATE")) 
+        {
+            System.out.print("Ski pass is not expired or has remaining uses. Is this a refund? (y/n): ");
+            String response = scanner.nextLine().trim().toLowerCase();
+            if (!response.equals("y")) {
+                System.out.println("Deletion cancelled.");
+                return;
+            }
+        }
+
+        try {
+            Statement stmt = connection.createStatement();
+            // Archive the ski pass before deletion
+            stmt.executeUpdate(
+                "INSERT INTO ArchivedSkiPass " +
+                "SELECT * FROM SkiPass WHERE PassID = " + passId
+            );
+    
+            // Then delete it from active table
+            stmt.executeUpdate("DELETE FROM SkiPass WHERE PassID = " + passId);
+    
+            System.out.println("Ski pass successfully deleted and archived.");
+        } catch (SQLException e) {
+            System.err.println("*** SQLException: "
+                + "Could not execute query.");
+            System.err.println("\tMessage:   " + e.getMessage());
+            System.err.println("\tSQLState:  " + e.getSQLState());
+            System.err.println("\tErrorCode: " + e.getErrorCode());
+        }
+    }
+    
+
+    private static void DeleteMemberQuery() {
+        System.out.println("Please enter Member ID that you wish to delete");
+        int memberId;
+        try {
+            memberId = Integer.parseInt(scanner.nextLine().trim());
+        }
+        catch (NumberFormatException e) {
+            System.out.println("Invalid Ski Pass ID.");
+            return;
+        }
+
+        // Check if member exists
+        if (!checkIfExists("SELECT COUNT(*) FROM Member WHERE MemberID = " + memberId)) {
+            System.out.println("Member doesn't exist!");
+            return;
+        }
+
+        // Check active ski passes
+        if (checkIfExists("SELECT COUNT(*) FROM SkiPass WHERE MemberID = " + memberId +
+                        " AND (RemainingUses > 0 OR ExpirationDate >= SYSDATE)")) {
+            System.out.println("Cannot delete member: active ski passes exist.");
+            return;
+        }
+
+        // Check open rentals
+        if (checkIfExists("SELECT COUNT(*) FROM EquipmentRecord WHERE EMemberID = " + memberId +
+                        " AND ReturnStatus = 'NotReturned'")) {
+            System.out.println("Cannot delete member: open equipment rentals exist.");
+            return;
+        }
+
+        // Check unused lessons
+        if (checkIfExists("SELECT COUNT(*) FROM LessonPurchase WHERE LPMemberID = " + memberId +
+                        " AND RemainingSessions > 0")) {
+            System.out.println("Cannot delete member: unused lesson sessions exist.");
+            return;
+        }
+
+        // All checks passed — perform deletions
+        try {
+            Statement stmt = connection.createStatement();
+
+            stmt.executeUpdate("DELETE FROM LessonPurchase WHERE LPMemberID = " + memberId);
+            stmt.executeUpdate("DELETE FROM EquipmentRecord WHERE EMemberID = " + memberId);
+            stmt.executeUpdate("DELETE FROM SkiPass WHERE MemberID = " + memberId);
+            stmt.executeUpdate("DELETE FROM Member WHERE MemberID = " + memberId);
+
+            System.out.println("Member and all associated records successfully deleted.");
+
+        } catch (SQLException e) {
+            System.err.println("*** SQLException: "
+                + "Could not execute query.");
+            System.err.println("\tMessage:   " + e.getMessage());
+            System.err.println("\tSQLState:  " + e.getSQLState());
+            System.err.println("\tErrorCode: " + e.getErrorCode());
+        }
+    }
+
+    /**
+     * Executes a SELECT COUNT(*) query and returns true if the result is greater than 0.
+     */
+    private static boolean checkIfExists(String sql) {
+        try {
+            Statement stmt = connection.createStatement();
+            ResultSet rs = stmt.executeQuery(sql);
+            if (rs.next()) {
+                return rs.getInt(1) > 0;
+            }
+        } catch (SQLException e) {
+            System.err.println("*** SQLException: "
+                + "Could not execute query.");
+            System.err.println("\tMessage:   " + e.getMessage());
+            System.err.println("\tSQLState:  " + e.getSQLState());
+            System.err.println("\tErrorCode: " + e.getErrorCode());
+        }
+        return false;
+    }
 
     private static void UpdateTupleInTable() {
         System.out.println("\n--- Update Menu ---");
@@ -463,6 +748,7 @@ public class Prog4Raw {
             System.err.println("ErrorCode: " + e.getErrorCode());
         }
     }
+
 
     private static void UpdateMember() throws SQLException {
         System.out.print("Enter member ID to update: ");
@@ -1101,16 +1387,17 @@ public class Prog4Raw {
         }
         
         java.sql.Timestamp rentalTime = new java.sql.Timestamp(System.currentTimeMillis());
-        
+
         PreparedStatement insertStmt = connection.prepareStatement(
-            "INSERT INTO EquipmentRecord (RentalID, EMemberID, EPassID, ReturnStatus, RentalTime) " +
-            "VALUES (?, ?, ?, 'N', ?)"
+            "INSERT INTO EquipmentRecord (RentalID, EMemberID, EPassID, EquipmentID, ReturnStatus, RentalTime) " +
+            "VALUES (?, ?, ?, ?, 'N', ?)"
         );
-        
+
         insertStmt.setInt(1, rentalId);
         insertStmt.setInt(2, memberId);
         insertStmt.setInt(3, passId);
-        insertStmt.setTimestamp(4, rentalTime);
+        insertStmt.setInt(4, equipmentId); // New parameter
+        insertStmt.setTimestamp(5, rentalTime); // Index updated from 4 to 5
         
         connection.setAutoCommit(false);
         
